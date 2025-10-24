@@ -1,0 +1,14 @@
+[project]
+name = "opl-to-mobu-imports"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "dbf>=0.99.11",
+    "openpyxl>=3.1.5",
+    "pandas>=2.3.3",
+    "pip>=25.2",
+    "psycopg2-binary==2.9.10",
+    "sqlalchemy>=2.0.44",
+    "tablib>=3.8.0",
+]
