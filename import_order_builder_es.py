@@ -8,14 +8,14 @@ import dbf
 import subprocess
 import sys
 
-# Try to import tkinter, but make it optional
+# Try a import tkinter, but make it optional
 try:
     from tkinter import Tk, filedialog
     TKINTER_AVAILABLE = True
 except ImportError:
 
     TKINTER_AVAILABLE = False
-    print("Note: tkinter not available. File picker dialog will be disabled.")
+    print("Nota: tkinter no disponible. El selector de archivos estará deshabilitado.")
 
 # Database configuration - modify these as needed
 DB_USER = "jm"
@@ -32,18 +32,18 @@ def get_db_connection():
 
 def select_excel_file() -> Optional[str]:
     """
-    Open a file picker dialog for the user to select an Excel file.
+    Open a file picker dialog for the user a select an Excel file.
     Returns the selected file path or None if cancelled.
     """
     root = Tk()
     root.withdraw()  # Hide the main window
-    root.attributes('-topmost', True)  # Bring dialog to front
+    root.attributes('-topmost', True)  # Bring dialog a front
 
     file_path = filedialog.askopenfilename(
-        title="Select Excel Order File",
+        title="Seleccionar Archivo de Pedido Excel",
         filetypes=[
-            ("Excel files", "*.xlsx *.xls"),
-            ("All files", "*.*")
+            ("Archivos Excel", "*.xlsx *.xls"),
+            ("Todos los archivos", "*.*")
         ]
     )
 
@@ -55,45 +55,45 @@ def select_excel_file() -> Optional[str]:
 def read_excel_orders(file_path: str) -> pd.DataFrame:
     """
     Read the Excel file containing order requirements.
-    Accepts any four columns and renames them to the required column names.
-    The order of columns is preserved: first column -> sup, second -> model,
+    Accepts any four columnas and renames them a the required column names.
+    The order of columnas is preserved: first column -> sup, second -> model,
     third -> coldes, fourth -> atrersemfix
-    The first column (sup) will be padded with leading zeros to make it 6 digits.
+    The first column (sup) will be padded with leading zeros a make it 6 digits.
     """
     df = pd.read_excel(file_path)
-    print(f"Read Excel file with {len(df)} rows and {len(df.columns)} columns")
+    print(f"Archivo Excel leído con {len(df)} filas y {len(df.columns)} columnas")
 
     required_columns = ['sup', 'model', 'coldes', 'atrersemfix']
 
-    # Check that we have exactly 4 columns
+    # Check that we have exactly 4 columnas
     if len(df.columns) != 4:
-        raise ValueError(f"Expected exactly 4 columns, but found {len(df.columns)} columns")
+        raise ValueError(f"Se esperaban exactamente 4 columnas, pero se encontraron {len(df.columns)} columnas")
 
     # Get the original column names for logging
     original_columns = df.columns.tolist()
-    print(f"Original columns: {original_columns}")
+    print(f"Columnas originales: {original_columns}")
 
-    # Rename columns to required names in order
+    # Rename columnas a required names in order
     df.columns = required_columns
-    print(f"Renamed columns to: {required_columns}")
+    print(f"Columnas renombradas a: {required_columns}")
 
     # Remove rows with any missing values (e.g., total rows, incomplete data)
     original_count = len(df)
     df = df.dropna(how='any')
     removed_count = original_count - len(df)
     if removed_count > 0:
-        print(f"Removed {removed_count} row(s) with missing values (e.g., total rows)")
+        print(f"Eliminadas {removed_count} fila(s) con valores faltantes (ej., filas totales)")
 
-    # Pad the first column (sup/idcontacto) with leading zeros to make it 6 digits
-    # Convert to int first to remove any decimal points (Excel reads numbers as floats)
+    # Pad the first column (sup/idcontacto) with leading zeros a make it 6 digits
+    # Convert a int first a remove any decimal points (Excel reads numbers as floats)
     df['sup'] = df['sup'].astype(int).astype(str).str.zfill(6)
-    print(f"Padded 'sup' column with leading zeros to 6 digits")
+    print(f"Columna 'sup' rellenada con ceros a la izquierda hasta 6 dígitos")
 
-    # Strip whitespace from string columns to avoid lookup issues
+    # Strip whitespace from string columnas a avoid lookup issues
     # (Excel data often has trailing spaces like "WHITE " that don't match DB values)
     df['model'] = df['model'].astype(str).str.strip()
     df['coldes'] = df['coldes'].astype(str).str.strip()
-    print(f"Stripped whitespace from 'model' and 'coldes' columns")
+    print(f"Espacios en blanco eliminados de las columnas 'model' y 'coldes'")
 
     return df
 
@@ -102,7 +102,7 @@ def normalize_string(s: str) -> str:
     """
     Normalize a string for comparison by:
     - Removing accents (é -> e, á -> a, etc.)
-    - Converting to uppercase
+    - Converting a uppercase
     - Stripping whitespace
     """
     # Decompose unicode characters and filter out combining marks (accents)
@@ -113,8 +113,8 @@ def normalize_string(s: str) -> str:
 
 def calculate_similarity(s1: str, s2: str) -> float:
     """
-    Calculate similarity ratio between two strings (0.0 to 1.0).
-    Uses a simple character-based approach similar to Levenshtein distance.
+    Calculate similarity ratio between two strings (0.0 a 1.0).
+    Uses a simple character-based approach similar a Levenshtein distance.
     """
     if s1 == s2:
         return 1.0
@@ -147,7 +147,7 @@ def find_similar_products(engine, sup: str, model: str, coldes: str) -> pd.DataF
     2. Same supplier, exact model, similar color (≥80% similarity)
     3. Same supplier, similar model and color (≥80% similarity each)
 
-    Returns DataFrame with columns: idcontacto, idmodelo, idcoldis, idcoflete,
+    Returns DataFrame with columnas: idcontacto, idmodelo, idcoldis, idcoflete,
                                      total_available_kg, model_similarity, color_similarity
     """
     # Search for products with same supplier and available status
@@ -205,11 +205,11 @@ def get_client_code(engine, idcontacto: str) -> str:
     1. For specific idcontacto values (000044, 000353, 000355, 000205, 000151, 000108, 000396),
        return '0002' as the idcentro (special cases)
     2. For other cases:
-       - Query mobu_opl_incontac to get idcontacto value (e.g., "AL0002")
-       - Remove two leading zeros to get "AL02"
-       - Query mobu_opl_ctcentro to find matching idcentro
+       - Query mobu_opl_incontac a get idcontacto value (e.g., "AL0002")
+       - Remove two leading zeros a get "AL02"
+       - Query mobu_opl_ctcentro a find matching idcentro
        - Return the matched idcentro value
-       - If not found at any step, raise an error for user to investigate
+       - If not found at any step, raise an error for user a investigate
 
     Args:
         engine: Database engine connection
@@ -225,10 +225,10 @@ def get_client_code(engine, idcontacto: str) -> str:
     special_cases = {'000044', '000353', '000355', '000205', '000151', '000108', '000396'}
 
     if idcontacto in special_cases:
-        print(f"  Using special case idcentro: 0002 for idcontacto: {idcontacto}")
+        print(f"  Usando caso especial idcentro: 0002 para idcontacto: {idcontacto}")
         return '0002'
 
-    # Query mobu_opl_incontac to get the idcontacto string representation
+    # Query mobu_opl_incontac a get the idcontacto string representation
     query = text("""
         SELECT idcontacto
         FROM ds_vfp.mobu_opl_incontac
@@ -241,7 +241,7 @@ def get_client_code(engine, idcontacto: str) -> str:
         row = query_result.fetchone()
 
         if not row:
-            error_msg = f"ERROR: idcontacto '{idcontacto}' not found in mobu_opl_incontac table. Please verify this contact exists in the database."
+            error_msg = f"ERROR: idcontacto '{idcontacto}' no encontrado en tabla mobu_opl_incontac. Por favor verifique que este contacto existe en la base de datos."
             print(f"\n{'='*80}")
             print(f"  {error_msg}")
             print(f"{'='*80}\n")
@@ -265,7 +265,7 @@ def get_client_code(engine, idcontacto: str) -> str:
                 else:
                     break
 
-            # Remove leading zeros (up to 2) from the number part
+            # Remove leading zeros (up a 2) from the number part
             number_stripped = number_part.lstrip('0')
             # If we removed more than 2 zeros, add some back
             zeros_removed = len(number_part) - len(number_stripped)
@@ -278,9 +278,9 @@ def get_client_code(engine, idcontacto: str) -> str:
         else:
             modified_value = contacto_value
 
-        print(f"  Searching for idcentro with modified value: '{modified_value}' (from '{contacto_value}')")
+        print(f"  Buscando idcentro con valor modificado: '{modified_value}' (de '{contacto_value}')")
 
-        # Query mobu_opl_ctcentro to find matching idcentro
+        # Query mobu_opl_ctcentro a find matching idcentro
         centro_query = text("""
             SELECT idcentro
             FROM ds_vfp.mobu_opl_ctcentro
@@ -294,16 +294,16 @@ def get_client_code(engine, idcontacto: str) -> str:
         if centro_row:
             idcentro = centro_row[0].strip() if centro_row[0] else None
             if idcentro:
-                print(f"  Found idcentro: {idcentro}")
+                print(f"  idcentro encontrado: {idcentro}")
                 return idcentro
             else:
-                error_msg = f"ERROR: Found matching record but idcentro is empty for modified value '{modified_value}' (from idcontacto '{idcontacto}'). Please verify the data in mobu_opl_ctcentro."
+                error_msg = f"ERROR: Registro encontrado pero idcentro está vacío para valor modificado '{modified_value}' (de idcontacto '{idcontacto}'). Por favor verifique los datos en mobu_opl_ctcentro."
                 print(f"\n{'='*80}")
                 print(f"  {error_msg}")
                 print(f"{'='*80}\n")
                 raise ValueError(error_msg)
         else:
-            error_msg = f"ERROR: No matching idcentro found in mobu_opl_ctcentro for '{modified_value}' (from idcontacto '{idcontacto}', original value '{contacto_value}'). Please verify this centro exists in the database."
+            error_msg = f"ERROR: No se encontró idcentro coincidente en mobu_opl_ctcentro para '{modified_value}' (de idcontacto '{idcontacto}', valor original '{contacto_value}'). Por favor verifique que este centro existe en la base de datos."
             print(f"\n{'='*80}")
             print(f"  {error_msg}")
             print(f"{'='*80}\n")
@@ -315,7 +315,7 @@ def get_all_available_inventory_for_product(engine, sup: str, model: str, coldes
     Get ALL available inventory for a product across ALL incoterms.
     This helps identify if there's inventory under different incoterms.
 
-    Returns DataFrame with columns: idcoflete, total_available_kg, oldest_idingreso
+    Returns DataFrame with columnas: idcoflete, total_available_kg, oldest_idingreso
     sorted by total_available_kg descending (most inventory first)
     """
     query = text("""
@@ -348,7 +348,7 @@ def get_incoterm_for_product(engine, sup: str, model: str, coldes: str) -> Tuple
     1. Query insaldo table filtered by sup (idcontacto), model (idmodelo),
        coldes (idcoldis), and idstatus='00'
     2. Get retnum values from insaldo
-    3. Query cohd table using retnum to get idcoflete
+    3. Query cohd table using retnum a get idcoflete
 
     Returns:
         Tuple of (idcoflete, matched_coldes) where matched_coldes is the actual
@@ -374,7 +374,7 @@ def get_incoterm_for_product(engine, sup: str, model: str, coldes: str) -> Tuple
         if row:
             idcoflete = row[0]
             oldest_idingreso = row[1]
-            print(f"  Found incoterm: {idcoflete} from oldest idingreso: {oldest_idingreso}")
+            print(f"  Incoterm encontrado: {idcoflete} del idingreso más antiguo: {oldest_idingreso}")
             return idcoflete, coldes  # Return idcoflete and the exact coldes used
         else:
             # DEBUG: Show what values actually exist in the database for this product
@@ -397,14 +397,14 @@ def get_incoterm_for_product(engine, sup: str, model: str, coldes: str) -> Tuple
             debug_result = conn.execute(debug_query, {'sup': sup, 'model': model})
             debug_rows = debug_result.fetchall()
 
-            print(f"  DEBUG: No exact match found. Searched for:")
-            print(f"    sup (idcontacto): '{sup}' (length: {len(sup)})")
-            print(f"    model (idmodelo): '{model}' (length: {len(model)})")
-            print(f"    coldes (idcoldis): '{coldes}' (length: {len(coldes)}, repr: {repr(coldes)})")
+            print(f"  DEBUG: No se encontró coincidencia exacta. Se buscó:")
+            print(f"    sup (idcontacto): '{sup}' (longitud: {len(sup)})")
+            print(f"    model (idmodelo): '{model}' (longitud: {len(model)})")
+            print(f"    coldes (idcoldis): '{coldes}' (longitud: {len(coldes)}, repr: {repr(coldes)})")
             print(f"    idstatus: '00'")
 
             if debug_rows:
-                print(f"  DEBUG: Found {len(debug_rows)} AVAILABLE record(s) (idstatus='00') with same sup/model:")
+                print(f"  DEBUG: Encontrados {len(debug_rows)} registro(s) DISPONIBLES (idstatus='00') con mismo sup/model:")
 
                 # Find best matches based on similarity
                 matches_with_similarity = []
@@ -413,52 +413,52 @@ def get_incoterm_for_product(engine, sup: str, model: str, coldes: str) -> Tuple
                     similarity = calculate_similarity(coldes, db_coldes)
                     matches_with_similarity.append((i, row, similarity))
 
-                    print(f"    [{i}] idcontacto: '{row[0]}', idmodelo: '{row[1]}', idcoldis: '{row[2]}' (length: {row[4]}, repr: {repr(row[2])}), idstatus: '{row[3]}', idcoflete: '{row[5]}'")
+                    print(f"    [{i}] idcontacto: '{row[0]}', idmodelo: '{row[1]}', idcoldis: '{row[2]}' (longitud: {row[4]}, repr: {repr(row[2])}), idstatus: '{row[3]}', idcoflete: '{row[5]}'")
                     if row[2]:  # If idcoldis is not None
                         # Show character-by-character comparison
                         if row[2] != coldes:
-                            print(f"        Difference: Expected '{coldes}' vs Database '{row[2]}'")
-                            print(f"        Byte comparison: Expected {coldes.encode('utf-8')} vs Database {row[2].encode('utf-8')}")
-                            print(f"        Similarity score: {similarity:.2%}")
+                            print(f"        Diferencia: Esperado '{coldes}' vs Base de datos '{row[2]}'")
+                            print(f"        Comparación de bytes: Esperado {coldes.encode('utf-8')} vs Base de datos {row[2].encode('utf-8')}")
+                            print(f"        Puntuación de similitud: {similarity:.2%}")
 
                 # Sort by similarity (descending)
                 matches_with_similarity.sort(key=lambda x: x[2], reverse=True)
 
                 # Find close matches (similarity >= 80%)
-                # All debug_rows already have idstatus='00', so no need to filter again
+                # Todos los debug_rows already have idstatus='00', so no need a filter again
                 close_matches = [(idx, row, sim) for idx, row, sim in matches_with_similarity if sim >= 0.80]
 
                 if close_matches:
-                    print(f"\n  FUZZY MATCH: Found {len(close_matches)} close match(es) with idstatus='00':")
+                    print(f"\n  COINCIDENCIA DIFUSA: Encontradas {len(close_matches)} coincidencia(s) cercana(s) con idstatus='00':")
                     for idx, row, sim in close_matches:
-                        print(f"    [{idx}] '{row[2]}' (similarity: {sim:.2%}, idcoflete: '{row[5]}')")
+                        print(f"    [{idx}] '{row[2]}' (similitud: {sim:.2%}, idcoflete: '{row[5]}')")
 
-                    print(f"\n  Looking for: '{coldes}'")
+                    print(f"\n  Buscando: '{coldes}'")
                     best_match_idx, best_match_row, best_match_sim = close_matches[0]
-                    print(f"  Best match: [{best_match_idx}] '{best_match_row[2]}' (similarity: {best_match_sim:.2%})")
+                    print(f"  Mejor coincidencia: [{best_match_idx}] '{best_match_row[2]}' (similitud: {best_match_sim:.2%})")
 
                     # Ask user for confirmation
-                    response = input(f"\n  >> Use this match? (y/n/a for 'yes to all similar'): ").strip().lower()
+                    response = input(f"\n  >> ¿Usar esta coincidencia? (s/n/t para 'sí a todas las similares'): ").strip().lower()
 
                     if response in ['y', 'yes', 'a', 'all']:
-                        print(f"  ✓ Using database value: '{best_match_row[2]}' with idcoflete: '{best_match_row[5]}'")
+                        print(f"  ✓ Usando valor de base de datos: '{best_match_row[2]}' con idcoflete: '{best_match_row[5]}'")
                         return best_match_row[5], best_match_row[2]  # Return (idcoflete, matched_coldes)
                     else:
-                        print(f"  ✗ Match rejected by user")
-                        raise ValueError(f"No incoterm found for sup={sup}, model={model}, coldes={coldes} (user rejected fuzzy match)")
+                        print(f"  ✗ Coincidencia rechazada por usuario")
+                        raise ValueError(f"No se encontró incoterm para sup={sup}, model={model}, coldes={coldes} (usuario rechazó coincidencia difusa)")
                 else:
-                    print(f"  No close matches found (similarity threshold: 80%)")
+                    print(f"  No se encontraron coincidencias cercanas (umbral de similitud: 80%)")
             else:
-                print(f"  DEBUG: No records found with sup={sup} and model={model}")
+                print(f"  DEBUG: No se encontraron registros con sup={sup} y model={model}")
 
-            raise ValueError(f"No incoterm found for sup={sup}, model={model}, coldes={coldes}")
+            raise ValueError(f"No se encontró incoterm para sup={sup}, model={model}, coldes={coldes}")
 
 
 def get_available_items(engine, sup: str, model: str, coldes: str, idcoflete: str) -> pd.DataFrame:
     """
-    Get all available items from insaldo that match the product and incoterm criteria.
-    Returns full rows with all columns, sorted by FIFO rules:
-    1. First by idingreso (converted to numeric for proper sorting)
+    Get all available ítems de insaldo that match the product and incoterm criteria.
+    Returns full rows with all columnas, sorted by FIFO rules:
+    1. First by idingreso (converted a numeric for proper sorting)
     2. Then by ingresa date (earliest first)
     3. Finally by itemno for consistency
 
@@ -484,10 +484,10 @@ def get_available_items(engine, sup: str, model: str, coldes: str, idcoflete: st
 
     # DEBUG: Show what was returned from the query
     if not df.empty:
-        print(f"  DEBUG: Query returned {len(df)} items from {df['idingreso'].nunique()} idingreso(s)")
+        print(f"  DEBUG: Consulta devolvió {len(df)} ítems de {df['idingreso'].nunique()} idingreso(s)")
         for idingreso, group in df.groupby('idingreso', sort=False):
-            print(f"    idingreso {idingreso}: {len(group)} items, total {group['pesokgs'].sum():.2f}kg, retnum={group['retnum'].iloc[0]}")
-            print(f"      Date range: {group['ingresa'].min()} to {group['ingresa'].max()}")
+            print(f"    idingreso {idingreso}: {len(group)} ítems, total {group['pesokgs'].sum():.2f}kg, retnum={group['retnum'].iloc[0]}")
+            print(f"      Rango de fechas: {group['ingresa'].min()} a {group['ingresa'].max()}")
 
     return df
 
@@ -506,7 +506,7 @@ def validate_fifo_compliance(selected_items: pd.DataFrame) -> bool:
     if selected_items.empty or len(selected_items) <= 1:
         return True
 
-    # Check idingreso ordering (convert to numeric for comparison)
+    # Check idingreso ordering (convert a numeric for comparison)
     try:
         selected_items['_idingreso_numeric'] = pd.to_numeric(selected_items['idingreso'], errors='coerce')
         idingreso_sorted = selected_items['_idingreso_numeric'].is_monotonic_increasing
@@ -523,23 +523,23 @@ def validate_fifo_compliance(selected_items: pd.DataFrame) -> bool:
 
         return idingreso_sorted and ingresa_sorted
     except Exception as e:
-        print(f"  Warning: Could not validate FIFO compliance: {e}")
+        print(f"  Advertencia: No se pudo validar cumplimiento FIFO: {e}")
         return True  # Don't fail the process if validation has issues
 
 
 def select_items_for_order(available_items: pd.DataFrame, qty_needed: float) -> pd.DataFrame:
     """
-    Select items to fulfill the order quantity following FIFO rules.
+    Select items a fulfill the order quantity following FIFO rules.
 
     FIFO Logic:
     - Items are already sorted by idingreso (numeric ascending) and ingresa date (earliest first)
-    - Process items in this sorted order to ensure FIFO compliance
+    - Process items in this sorted order a ensure FIFO compliance
     - Continue taking from subsequent idingresos until qty_needed is fulfilled
     - If an idingreso has fewer than 5 remaining items after fulfilling qty, include all remaining items
 
     Args:
         available_items: DataFrame of available items sorted by FIFO rules (idingreso, ingresa date)
-        qty_needed: Total quantity (pesokgs) needed to fulfill the order
+        qty_needed: Total quantity (pesokgs) needed a fulfill the order
 
     Returns:
         DataFrame of selected items that fulfill the order
@@ -559,7 +559,7 @@ def select_items_for_order(available_items: pd.DataFrame, qty_needed: float) -> 
         pesokgs = row['pesokgs'] if pd.notna(row['pesokgs']) else 0.0
         idingreso = row['idingreso']
 
-        # Track when we move to a new idingreso
+        # Track when we move a a new idingreso
         if current_idingreso != idingreso:
             current_idingreso = idingreso
             items_in_current_ingreso = available_items[available_items['idingreso'] == idingreso]
@@ -597,26 +597,26 @@ def select_items_for_order(available_items: pd.DataFrame, qty_needed: float) -> 
 def generate_client_inventory_for_confirmation(engine, output_dir: str, client_code: str) -> Optional[str]:
     """
     Generate client inventory Excel for special case client '0002' (ITMA).
-    This allows the client to review their complete inventory and confirm
-    if they want to add anything else to the order.
+    This allows the client a review their complete inventory and confirm
+    if they want a add anything else a the order.
 
     Args:
         engine: Database engine connection
-        output_dir: Directory to save the inventory Excel file
+        output_dir: Directory a save the inventory Excel file
         client_code: Client code (idcentro)
 
     Returns:
-        Path to the generated inventory Excel file, or None if not applicable
+        Path a the generated inventory Excel file, or None if not applicable
     """
     # Only generate for special case client '0002' (ITMA)
     if client_code != '0002':
         return None
 
     print(f"\n{'='*80}")
-    print("CLIENT INVENTORY GENERATION (Special Case Client 0002)")
+    print("GENERACIÓN DE INVENTARIO DEL CLIENTE (Caso Especial Cliente 0002)")
     print(f"{'='*80}")
-    print("Generating complete inventory for client review...")
-    print("This allows the client to verify and add any additional items to the order.")
+    print("Generando inventario completo para revisión del cliente...")
+    print("Esto permite al cliente verificar y agregar cualquier ítem adicional al pedido.")
 
     # Get all idcontacto values that start with '0' (ITMA suppliers)
     query = text("""
@@ -632,10 +632,10 @@ def generate_client_inventory_for_confirmation(engine, output_dir: str, client_c
         idcontacto_list = [row[0] for row in result.fetchall()]
 
     if not idcontacto_list:
-        print("No inventory found for client 0002 (ITMA).")
+        print("No se encontró inventario para cliente 0002 (ITMA).")
         return None
 
-    print(f"Found {len(idcontacto_list)} supplier contacts for ITMA client")
+    print(f"Encontrados {len(idcontacto_list)} contactos de proveedor para cliente ITMA")
 
     # Get inventory by incoterm (reuse logic from inventory_viewer.py)
     idcontacto_params = ','.join([f"'{contact}'" for contact in idcontacto_list])
@@ -661,7 +661,7 @@ def generate_client_inventory_for_confirmation(engine, output_dir: str, client_c
         inventory_df = pd.read_sql(inventory_query, conn)
 
     if inventory_df.empty:
-        print("No available inventory found.")
+        print("No se encontró inventario disponible.")
         return None
 
     # Calculate days remaining in 2-year tax period
@@ -686,7 +686,7 @@ def generate_client_inventory_for_confirmation(engine, output_dir: str, client_c
                 'days_remaining': 'first'
             })
 
-            # Rename columns for readability in Spanish
+            # Rename columnas for readability in Spanish
             grouped.rename(columns={
                 'pesokgs': 'unidades',
                 'idcoldis': 'variante',
@@ -695,16 +695,16 @@ def generate_client_inventory_for_confirmation(engine, output_dir: str, client_c
                 'days_remaining': 'dias libres'
             }, inplace=True)
 
-            # Reorder columns
+            # Reorder columnas
             grouped = grouped[['idingreso', 'idmodelo', 'variante', 'unidades', 'u/m', 'fecha ingreso', 'dias libres']]
 
             # Clean up incoterm name for sheet name (Excel has 31 char limit)
             sheet_name = str(idcoflete)[:31] if idcoflete else "NO_INCOTERM"
 
-            # Write DataFrame to sheet
+            # Write DataFrame a sheet
             grouped.to_excel(writer, sheet_name=sheet_name, index=False)
 
-            print(f"  Added sheet '{sheet_name}': {len(grouped)} items, {grouped['unidades'].sum():.2f} total units")
+            print(f"  Hoja agregada '{sheet_name}': {len(grouped)} ítems, {grouped['unidades'].sum():.2f} unidades totales")
 
     print(f"\nClient inventory Excel saved to: {output_path}")
     print(f"{'='*80}\n")
@@ -715,22 +715,22 @@ def generate_client_inventory_for_confirmation(engine, output_dir: str, client_c
 def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, selected_incoterms: List[str] = None) -> Optional[str]:
     """
     Generate inventory Excel filtered by specific incoterm(s).
-    This allows users to view available inventory for specific incoterms to add more products.
+    This allows users a view available inventory for specific incoterms a add more products.
 
     Args:
         engine: Database engine connection
-        output_dir: Directory to save the inventory Excel file
+        output_dir: Directory a save the inventory Excel file
         client_code: Client code (idcentro)
-        selected_incoterms: List of incoterm codes to include (None = all)
+        selected_incoterms: List of incoterm codes a include (None = all)
 
     Returns:
-        Path to the generated inventory Excel file, or None if no inventory found
+        Path a the generated inventory Excel file, or None if no inventory found
     """
     print(f"\n{'='*80}")
-    print("INVENTORY GENERATION BY INCOTERM")
+    print("GENERACIÓN DE INVENTARIO POR INCOTERM")
     print(f"{'='*80}")
-    print("Generating inventory filtered by selected incoterm(s)...")
-    print("This allows you to review available products and add more to the order.")
+    print("Generando inventario filtrado por incoterm(s) seleccionado(s)...")
+    print("Esto le permite revisar productos disponibles y agregar más al pedido.")
 
     # Get all idcontacto values for this client
     query = text("""
@@ -745,17 +745,17 @@ def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, se
         idcontacto_list = [row[0] for row in result.fetchall()]
 
     if not idcontacto_list:
-        print("No inventory found.")
+        print("No se encontró inventario.")
         return None
 
-    print(f"Found {len(idcontacto_list)} supplier contacts")
+    print(f"Encontrados {len(idcontacto_list)} contactos de proveedor")
 
     # Build incoterm filter if needed
     incoterm_filter = ""
     if selected_incoterms:
         incoterm_params = ','.join([f"'{inc}'" for inc in selected_incoterms])
         incoterm_filter = f"AND c.idcoflete IN ({incoterm_params})"
-        print(f"Filtering by incoterm(s): {', '.join(selected_incoterms)}")
+        print(f"Filtrando por incoterm(s): {', '.join(selected_incoterms)}")
 
     # Get inventory by incoterm
     idcontacto_params = ','.join([f"'{contact}'" for contact in idcontacto_list])
@@ -782,7 +782,7 @@ def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, se
         inventory_df = pd.read_sql(inventory_query, conn)
 
     if inventory_df.empty:
-        print("No available inventory found for selected incoterm(s).")
+        print("No se encontró inventario disponible para incoterm(s) seleccionado(s).")
         return None
 
     # Calculate days remaining in 2-year tax period
@@ -808,7 +808,7 @@ def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, se
                 'days_remaining': 'first'
             })
 
-            # Rename columns for readability in Spanish
+            # Rename columnas for readability in Spanish
             grouped.rename(columns={
                 'pesokgs': 'unidades',
                 'idcoldis': 'variante',
@@ -817,16 +817,16 @@ def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, se
                 'days_remaining': 'dias libres'
             }, inplace=True)
 
-            # Reorder columns
+            # Reorder columnas
             grouped = grouped[['idingreso', 'idmodelo', 'variante', 'unidades', 'u/m', 'fecha ingreso', 'dias libres']]
 
             # Clean up incoterm name for sheet name (Excel has 31 char limit)
             sheet_name = str(idcoflete)[:31] if idcoflete else "NO_INCOTERM"
 
-            # Write DataFrame to sheet
+            # Write DataFrame a sheet
             grouped.to_excel(writer, sheet_name=sheet_name, index=False)
 
-            print(f"  Added sheet '{sheet_name}': {len(grouped)} items, {grouped['unidades'].sum():.2f} total units")
+            print(f"  Hoja agregada '{sheet_name}': {len(grouped)} ítems, {grouped['unidades'].sum():.2f} unidades totales")
 
     print(f"\nInventory Excel saved to: {output_path}")
     print(f"{'='*80}\n")
@@ -841,7 +841,7 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
     New DBF Structure:
     1. numero - C(25): Order number (YYYYMMDD-HHMMSS-client)
     2. itemline - C(5): Item line number (left blank)
-    3. idproducto - C(15): Product ID (idingreso + itemno)
+    3. idproducto - C(15): Producto ID (idingreso + itemno)
     4. idcontacto - C(6): Contact/Supplier ID
     5. idmodelo - C(20): Model ID
     6. idcoldis - C(20): Color/Description ID
@@ -862,15 +862,15 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
     Args:
         result_df: DataFrame with selected items
         source_filename: Original Excel filename (without extension) for Numero field
-        dbf_output_dir: Directory to save DBF files (defaults to same as Excel output)
-        engine: Database engine connection (needed to fetch client codes)
-        selected_incoterms: List of incoterm codes to generate DBF for (None = all)
+        dbf_output_dir: Directory a save DBF files (defaults a same as Excel output)
+        engine: Database engine connection (needed a fetch client codes)
+        selected_incoterms: List of incoterm codes a generate DBF for (None = all)
 
     Returns:
         List of generated incoterm codes
     """
     if result_df.empty:
-        print("No data to generate DBF files")
+        print("No hay datos para generar archivos DBF")
         return []
 
     generated_incoterms = []
@@ -878,20 +878,20 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
     # Get current datetime for order creation timestamps
     current_datetime = datetime.now()
 
-    # Group by incoterm to create separate orders
+    # Group by incoterm a create separate orders
     for idcoflete, incoterm_group in result_df.groupby('order_idcoflete'):
         # Skip if this incoterm is not in the selected list
         if selected_incoterms is not None and idcoflete not in selected_incoterms:
-            print(f"Skipping incoterm {idcoflete} (not selected)")
+            print(f"Omitiendo incoterm {idcoflete} (no seleccionado)")
             continue
-        # Get the first idcontacto from this group to fetch the client code
+        # Get the first idcontacto from this group a fetch the client code
         first_idcontacto = incoterm_group['idcontacto'].iloc[0]
 
         # Fetch client code (idcentro)
         if engine:
             client_code = get_client_code(engine, first_idcontacto)
         else:
-            print("  WARNING: No database engine provided, using default client code '0002'")
+            print("  ADVERTENCIA: No se proporcionó motor de base de datos, usando código de cliente predeterminado '0002'")
             client_code = '0002'
 
         # Generate numero: YYYYMMDD-HHMMSS-client
@@ -900,7 +900,7 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
 
         print(f"\nGenerating DBF for incoterm {idcoflete}")
         print(f"  Numero: {numero}")
-        print(f"  Client code: {client_code}")
+        print(f"  Código de cliente: {client_code}")
 
         # Create DBF filename: numero_idcoflete.dbf
         dbf_filename = f"{numero}_{idcoflete}.dbf"
@@ -913,7 +913,7 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
         table_structure = [
             'numero C(25)',      # Order number (YYYYMMDD-HHMMSS-client)
             'itemline C(5)',     # Item line number
-            'idproducto C(15)',  # Product ID
+            'idproducto C(15)',  # Producto ID
             'idcontacto C(6)',   # Contact/Supplier ID
             'idmodelo C(20)',    # Model ID
             'idcoldis C(20)',    # Color/Description ID
@@ -947,9 +947,9 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
             idubica1 = str(row.get('idubica1', ''))[:6] if pd.notna(row.get('idubica1')) else ''
 
             # Debug: print individual row data
-            print(f"    DBF item: numero={numero}, idproducto={idproducto}, cantidad={row['pesokgs']:.2f}, client={client_code}, idcoflete={idcoflete}")
+            print(f"    Ítem DBF: numero={numero}, idproducto={idproducto}, cantidad={row['pesokgs']:.2f}, client={client_code}, idcoflete={idcoflete}")
 
-            # Add record to DBF table
+            # Add record a DBF table
             # Empty D (Date) fields should be None, empty L (Logical) should be False or None
             table.append({
                 'numero': numero[:25],  # YYYYMMDD-HHMMSS-client format
@@ -973,10 +973,10 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
                 'idcoflete': str(idcoflete)[:6]  # Incoterm code
             })
 
-        # Close the table to save changes
+        # Close the table a save changes
         table.close()
 
-        print(f"DBF file saved: {dbf_path} ({len(incoterm_group)} items)")
+        print(f"Archivo DBF guardado: {dbf_path} ({len(incoterm_group)} items)")
         generated_incoterms.append(idcoflete)
 
     return generated_incoterms
@@ -984,15 +984,15 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
 
 def build_import_order(excel_path: str, output_path: str = None, generate_dbf: bool = True) -> Tuple[pd.DataFrame, bool]:
     """
-    Main function to build the import order.
+    Main function a build the import order.
 
     Args:
-        excel_path: Path to the Excel file with order requirements
-        output_path: Optional path to save the output Excel file
-        generate_dbf: Whether to generate DBF files (default: True)
+        excel_path: Path a the Excel file with order requirements
+        output_path: Optional path a save the output Excel file
+        generate_dbf: Whether a generate DBF files (default: True)
 
     Returns:
-        Tuple of (DataFrame with all selected items, bool indicating if DBF files were generated)
+        Tuple of (DataFrame with all selected ítems, bool indicating if DBF files were generated)
     """
     dbf_generated = False  # Track whether DBF generation actually happened
     # Extract filename from excel_path for DBF generation
@@ -1014,26 +1014,26 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
         coldes = order_row['coldes']
         qty_needed = order_row['atrersemfix']
 
-        # Convert index to int for display (iterrows returns Hashable index)
+        # Convert index a int for display (iterrows returns Hashable index)
         order_num = int(row_idx) + 1 if isinstance(row_idx, (int, float)) else row_idx + 1
 
-        print(f"Processing order {order_num}/{len(orders_df)}: sup={sup}, model={model}, coldes={coldes}, qty={qty_needed}")
+        print(f"Procesando pedido {order_num}/{len(orders_df)}: sup={sup}, model={model}, coldes={coldes}, qty={qty_needed}")
 
         try:
             # First, check ALL available inventory across ALL incoterms for this exact product
             all_inventory = get_all_available_inventory_for_product(engine, sup, model, coldes)
 
             if not all_inventory.empty:
-                # Product exists! Show all incoterm options
-                print(f"  ✓ Product found across {len(all_inventory)} incoterm(s):")
+                # Producto exists! Show all incoterm options
+                print(f"  ✓ Producto encontrado en {len(all_inventory)} incoterm(s):")
                 for idx, inv_row in all_inventory.iterrows():
-                    print(f"    - {inv_row['idcoflete']}: {inv_row['total_available_kg']:.2f} kg available (oldest idingreso: {inv_row['oldest_idingreso']})")
+                    print(f"    - {inv_row['idcoflete']}: {inv_row['total_available_kg']:.2f} kg disponibles (idingreso más antiguo: {inv_row['oldest_idingreso']})")
 
                 # FIFO PRINCIPLE: Use OLDEST idingreso first, regardless of incoterm
-                # Sort by oldest idingreso to respect FIFO
+                # Sort by oldest idingreso a respect FIFO
                 all_inventory_sorted = all_inventory.sort_values('oldest_idingreso_num')
 
-                # Get items from ALL incoterms, sorted by idingreso (FIFO)
+                # Get ítems de ALL incoterms, sorted by idingreso (FIFO)
                 # We'll select across incoterms if needed
                 all_available_items = []
                 incoterms_used = []
@@ -1070,19 +1070,19 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                         row = result.fetchone()
                         idcoflete = row[0] if row else incoterms_used[0]
 
-                    print(f"  → Following FIFO: Starting from oldest idingreso {oldest_idingreso} (incoterm: {idcoflete})")
+                    print(f"  → Siguiendo FIFO: Comenzando desde idingreso más antiguo {oldest_idingreso} (incoterm: {idcoflete})")
 
                     if len(set(incoterms_used)) > 1 and not quantity_sufficient:
-                        print(f"  ℹ Multiple incoterms available - will select from oldest first, complementing if needed")
+                        print(f"  ℹ Múltiples incoterms disponibles - se seleccionará del más antiguo primero, complementando si es necesario")
 
                     if quantity_sufficient:
-                        print(f"  → Total available: {total_available:.2f} kg (needed: {qty_needed:.2f} kg)")
+                        print(f"  → Total disponible: {total_available:.2f} kg (necesarios: {qty_needed:.2f} kg)")
                     else:
                         shortage = qty_needed - total_available
-                        print(f"  ⚠ Insufficient total quantity: {total_available:.2f} kg (needed: {qty_needed:.2f} kg, shortage: {shortage:.2f} kg)")
+                        print(f"  ⚠ Cantidad total insuficiente: {total_available:.2f} kg (necesarios: {qty_needed:.2f} kg, faltante: {shortage:.2f} kg)")
                 else:
                     # No items found (shouldn't happen if all_inventory not empty)
-                    print(f"  ERROR: Inventory exists but no items could be retrieved")
+                    print(f"  ERROR: El inventario existe pero no se pudieron recuperar ítems")
                     available_items = pd.DataFrame()
                     matched_coldes = coldes
                     product_found = False
@@ -1092,13 +1092,13 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
 
             else:
                 # No exact match - try fuzzy matching on coldes
-                print(f"  No exact match found, trying fuzzy color matching...")
+                print(f"  No se encontró coincidencia exacta, intentando coincidencia difusa de color...")
                 idcoflete, matched_coldes = get_incoterm_for_product(engine, sup, model, coldes)
 
                 if matched_coldes != coldes:
-                    print(f"  Found incoterm: {idcoflete} (using fuzzy-matched coldes: '{matched_coldes}')")
+                    print(f"  Incoterm encontrado: {idcoflete} (usando coldes con coincidencia difusa: '{matched_coldes}')")
                 else:
-                    print(f"  Found incoterm: {idcoflete}")
+                    print(f"  Incoterm encontrado: {idcoflete}")
 
                 # Get available items with matching incoterm (use the matched coldes value)
                 available_items = get_available_items(engine, sup, model, matched_coldes, idcoflete)
@@ -1110,21 +1110,21 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
             if not product_found or not quantity_sufficient:
                 # Determine error type
                 if not product_found:
-                    error_msg = 'No available items found'
-                    print(f"  WARNING: {error_msg}")
+                    error_msg = 'No se encontraron ítems disponibles'
+                    print(f"  ADVERTENCIA: {error_msg}")
                 else:
                     shortage = qty_needed - total_available
-                    error_msg = f'Insufficient quantity (available: {total_available:.2f} kg, needed: {qty_needed:.2f} kg, shortage: {shortage:.2f} kg)'
-                    print(f"  WARNING: {error_msg}")
+                    error_msg = f'Cantidad insuficiente (disponible: {total_available:.2f} kg, necesarios: {qty_needed:.2f} kg, faltante: {shortage:.2f} kg)'
+                    print(f"  ADVERTENCIA: {error_msg}")
 
                 # Search for similar products
-                print(f"  Searching for similar products...")
+                print(f"  Buscando productos similares...")
                 similar_products = find_similar_products(engine, sup, model, coldes)
 
                 if not similar_products.empty:
-                    print(f"  → Found {len(similar_products)} similar product(s) - will prompt for selection at end")
+                    print(f"  → Encontrados {len(similar_products)} producto(s) similar(es) - se solicitará selección al final")
 
-                    # DEFER PROMPT: Add to products_needing_review instead of prompting now
+                    # DEFER PROMPT: Add a products_needing_review instead of prompting now
                     products_needing_review.append({
                         'order_num': order_num,
                         'sup': sup,
@@ -1139,7 +1139,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     })
                     continue
                 else:
-                    print(f"  ✗ No similar products found")
+                    print(f"  ✗ No se encontraron productos similares")
                     failed_orders.append({
                         'order_num': order_num,
                         'sup': sup,
@@ -1151,16 +1151,16 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     })
                     continue
 
-            # Select items to fulfill the order (or partial if insufficient)
+            # Select items a fulfill the order (or partial if insufficient)
             selected_items = select_items_for_order(available_items, qty_needed)
 
             if not selected_items.empty:
                 # Validate FIFO compliance
                 is_fifo_compliant = validate_fifo_compliance(selected_items)
                 if not is_fifo_compliant:
-                    print(f"  WARNING: Selected items may not be FIFO compliant!")
+                    print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
 
-                # Add order reference columns
+                # Add order reference columnas
                 selected_items['order_sup'] = sup
                 selected_items['order_model'] = model
                 selected_items['order_coldes'] = coldes
@@ -1175,20 +1175,20 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                 num_items = len(selected_items)
 
                 print(f"\n  {'─'*76}")
-                print(f"  ✓ ORDER FULFILLED")
+                print(f"  ✓ PEDIDO CUMPLIDO")
                 print(f"  {'─'*76}")
-                print(f"    Items added: {num_items} items")
-                print(f"    Weight added: {actual_qty:.2f} kg (needed: {qty_needed:.2f} kg)")
-                print(f"    From {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
+                print(f"    Ítems agregados: {num_items} items")
+                print(f"    Peso agregado: {actual_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
+                print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
 
                 # Show incoterm breakdown if multiple incoterms used
                 if len(unique_incoterms) > 1:
-                    print(f"    ⚠ CROSS-INCOTERM FULFILLMENT: Using {len(unique_incoterms)} incoterm(s)")
+                    print(f"    ⚠ CUMPLIMIENTO MULTI-INCOTERM: Usando {len(unique_incoterms)} incoterm(s)")
                     for inc in unique_incoterms:
                         inc_items = selected_items[selected_items['source_idcoflete'] == inc]
                         inc_qty = inc_items['pesokgs'].sum()
                         inc_ingresos = inc_items['idingreso'].unique()
-                        print(f"      - {inc}: {inc_qty:.2f} kg from idingreso(s) {', '.join(map(str, inc_ingresos))}")
+                        print(f"      - {inc}: {inc_qty:.2f} kg de idingreso(s) {', '.join(map(str, inc_ingresos))}")
                 else:
                     print(f"    Incoterm: {unique_incoterms[0]}")
 
@@ -1197,23 +1197,23 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                 # Warn if partial fulfillment
                 if actual_qty < qty_needed:
                     shortage = qty_needed - actual_qty
-                    print(f"  ⚠ PARTIAL FULFILLMENT: Short by {shortage:.2f} kg")
+                    print(f"  ⚠ CUMPLIMIENTO PARCIAL: Faltante de {shortage:.2f} kg")
 
                 all_selected_items.append(selected_items)
             else:
-                print(f"  WARNING: Could not select items for this order")
+                print(f"  ADVERTENCIA: No se pudieron seleccionar ítems para este pedido")
                 failed_orders.append({
                     'order_num': order_num,
                     'sup': sup,
                     'model': model,
                     'coldes': coldes,
                     'qty_needed': qty_needed,
-                    'error': 'Could not select items',
+                    'error': 'No se pudieron seleccionar ítems',
                     'alternatives': 0
                 })
 
         except Exception as e:
-            print(f"  ERROR processing order: {str(e)}")
+            print(f"  ERROR procesando pedido: {str(e)}")
             failed_orders.append({
                 'order_num': order_num,
                 'sup': sup,
@@ -1228,10 +1228,10 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
     # DEFERRED PROMPTS: Handle products needing review (after all orders processed)
     if products_needing_review:
         print(f"\n{'='*80}")
-        print(f"PRODUCTS NEEDING REVIEW: {len(products_needing_review)} product(s) require your attention")
+        print(f"PRODUCTOS QUE REQUIEREN REVISIÓN: {len(products_needing_review)} producto(s) requieren su atención")
         print(f"{'='*80}")
-        print("The following products had issues during processing. Please review the")
-        print("similar alternatives and select which ones to use.\n")
+        print("Los siguientes productos tuvieron problemas durante el procesamiento. Por favor revise las")
+        print("alternativas similares y seleccione cuáles usar.\n")
 
         for idx, product_info in enumerate(products_needing_review, 1):
             order_num = product_info['order_num']
@@ -1245,37 +1245,37 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
             similar_products = product_info['similar_products']
 
             print(f"\n{'─'*76}")
-            print(f"Product {idx}/{len(products_needing_review)}: Order #{order_num}")
+            print(f"Producto {idx}/{len(products_needing_review)}: Pedido #{order_num}")
             print(f"{'─'*76}")
-            print(f"  Original: sup={sup}, model={model}, coldes={coldes}, qty_needed={qty_needed} kg")
-            print(f"  Issue: {error_msg}")
-            print(f"\n  SIMILAR PRODUCTS FOUND: {len(similar_products)} alternative(s)")
+            print(f"  Original: sup={sup}, model={model}, coldes={coldes}, cant_necesaria={qty_needed} kg")
+            print(f"  Problema: {error_msg}")
+            print(f"\n  PRODUCTOS SIMILARES ENCONTRADOS: {len(similar_products)} alternativa(s)")
             print(f"  {'─'*76}")
 
             # Display top 5 similar products
             for alt_idx, (_, alt_product) in enumerate(similar_products.head(5).iterrows(), 1):
-                print(f"  [{alt_idx}] Model: {alt_product['idmodelo']} | Color: {alt_product['idcoldis']} | "
+                print(f"  [{alt_idx}] Modelo: {alt_product['idmodelo']} | Color: {alt_product['idcoldis']} | "
                       f"Incoterm: {alt_product['idcoflete']}")
-                print(f"      Available: {alt_product['total_available_kg']:.2f} kg | "
+                print(f"      Disponible: {alt_product['total_available_kg']:.2f} kg | "
                       f"Model similarity: {alt_product['model_similarity']:.1%} | "
                       f"Color similarity: {alt_product['color_similarity']:.1%}")
 
             # Display available options
             print(f"\n  {'─'*76}")
-            print(f"  AVAILABLE OPTIONS:")
+            print(f"  OPCIONES DISPONIBLES:")
             print(f"  {'─'*76}")
             if available_qty > 0:
-                print(f"  [p] PARTIAL - Import only the available {available_qty:.2f} kg (partial fulfillment)")
-            print(f"  [1-{min(5, len(similar_products))}] COMPLEMENT - Import available {available_qty:.2f} kg + selected alternative")
-            print(f"  [n] CANCEL - Skip this product entirely (import nothing)")
+                print(f"  [p] PARCIAL - Importar solo los {available_qty:.2f} kg disponibles (cumplimiento parcial)")
+            print(f"  [1-{min(5, len(similar_products))}] COMPLEMENTAR - Importar {available_qty:.2f} kg disponibles + alternativa seleccionada")
+            print(f"  [n] CANCELAR - Omitir este producto completamente (no importar nada)")
             print(f"  {'─'*76}")
 
-            # Prompt user to select option
-            response = input(f"\n  >> Your choice: ").strip().lower()
+            # Prompt user a select option
+            response = input(f"\n  >> Su elección: ").strip().lower()
 
             # Handle PARTIAL import option
             if response == 'p' and available_qty > 0:
-                print(f"  ✓ Importing partial quantity: {available_qty:.2f} kg")
+                print(f"  ✓ Importando cantidad parcial: {available_qty:.2f} kg")
 
                 # Get available items for the original product
                 available_items = product_info['available_items']
@@ -1288,9 +1288,9 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                         # Validate FIFO compliance
                         is_fifo_compliant = validate_fifo_compliance(selected_items)
                         if not is_fifo_compliant:
-                            print(f"  WARNING: Selected items may not be FIFO compliant!")
+                            print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
 
-                        # Add order reference columns
+                        # Add order reference columnas
                         selected_items['order_sup'] = sup
                         selected_items['order_model'] = model
                         selected_items['order_coldes'] = coldes
@@ -1303,28 +1303,28 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                         num_items = len(selected_items)
 
                         print(f"\n  {'─'*76}")
-                        print(f"  ✓ PARTIAL ORDER IMPORTED")
+                        print(f"  ✓ PEDIDO PARCIAL IMPORTADO")
                         print(f"  {'─'*76}")
-                        print(f"    Items added: {num_items} items")
-                        print(f"    Weight added: {actual_qty:.2f} kg (needed: {qty_needed:.2f} kg)")
-                        print(f"    Shortage: {qty_needed - actual_qty:.2f} kg")
-                        print(f"    From {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
+                        print(f"    Ítems agregados: {num_items} items")
+                        print(f"    Peso agregado: {actual_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
+                        print(f"    Faltante: {qty_needed - actual_qty:.2f} kg")
+                        print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
                         print(f"  {'─'*76}\n")
 
                         all_selected_items.append(selected_items)
                     else:
-                        print(f"  ✗ Could not select items for partial import")
+                        print(f"  ✗ No se pudieron seleccionar ítems para importación parcial")
                         failed_orders.append({
                             'order_num': order_num,
                             'sup': sup,
                             'model': model,
                             'coldes': coldes,
                             'qty_needed': qty_needed,
-                            'error': f'{error_msg} (partial import failed)',
+                            'error': f'{error_msg} (importación parcial falló)',
                             'alternatives': len(similar_products)
                         })
                 else:
-                    print(f"  ✗ No available items to import")
+                    print(f"  ✗ No hay ítems disponibles para importar")
                     failed_orders.append({
                         'order_num': order_num,
                         'sup': sup,
@@ -1340,26 +1340,26 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                 selected_idx = int(response) - 1
                 alt_product = similar_products.iloc[selected_idx]
 
-                # Use the alternative product to complement
+                # Use the alternative product a complement
                 alt_model = alt_product['idmodelo']
                 alt_coldes = alt_product['idcoldis']
                 alt_idcoflete = alt_product['idcoflete']
 
-                print(f"  ✓ Complementing with alternative: model={alt_model}, coldes={alt_coldes}, incoterm={alt_idcoflete}")
+                print(f"  ✓ Complementando con alternativa: model={alt_model}, coldes={alt_coldes}, incoterm={alt_idcoflete}")
 
                 complement_items = []
                 total_imported_qty = 0.0
 
                 # Step 1: Import available quantity from original product (if any)
                 if available_qty > 0:
-                    print(f"  → Importing available {available_qty:.2f} kg from original product...")
+                    print(f"  → Importando {available_qty:.2f} kg disponibles del producto original...")
                     available_items = product_info['available_items']
 
                     if not available_items.empty:
                         original_selected = select_items_for_order(available_items, available_qty)
 
                         if not original_selected.empty:
-                            # Add order reference columns
+                            # Add order reference columnas
                             original_selected['order_sup'] = sup
                             original_selected['order_model'] = model
                             original_selected['order_coldes'] = coldes
@@ -1369,27 +1369,27 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                             original_qty = original_selected['pesokgs'].sum()
                             total_imported_qty += original_qty
                             complement_items.append(original_selected)
-                            print(f"    ✓ Added {len(original_selected)} items ({original_qty:.2f} kg) from original")
+                            print(f"    ✓ Agregados {len(original_selected)} items ({original_qty:.2f} kg) del original")
 
                 # Step 2: Calculate remaining quantity needed
                 remaining_qty = qty_needed - total_imported_qty
-                print(f"  → Remaining quantity needed: {remaining_qty:.2f} kg")
+                print(f"  → Cantidad restante necesaria: {remaining_qty:.2f} kg")
 
-                # Step 3: Import from alternative to complement
+                # Step 3: Import from alternative a complement
                 if remaining_qty > 0:
-                    print(f"  → Importing {remaining_qty:.2f} kg from alternative...")
+                    print(f"  → Importando {remaining_qty:.2f} kg de la alternativa...")
                     alt_available_items = get_available_items(engine, sup, alt_model, alt_coldes, alt_idcoflete)
                     alt_total_available = alt_available_items['pesokgs'].sum()
 
                     if alt_total_available < remaining_qty:
-                        print(f"    ⚠ Alternative has insufficient quantity ({alt_total_available:.2f} kg < {remaining_qty:.2f} kg)")
-                        print(f"    Will use all available {alt_total_available:.2f} kg from alternative")
+                        print(f"    ⚠ La alternativa tiene cantidad insuficiente ({alt_total_available:.2f} kg < {remaining_qty:.2f} kg)")
+                        print(f"    Se usarán todos los {alt_total_available:.2f} kg disponibles de la alternativa")
 
-                    # Select items from alternative product
+                    # Select ítems de alternative product
                     alt_selected = select_items_for_order(alt_available_items, remaining_qty)
 
                     if not alt_selected.empty:
-                        # Add order reference columns
+                        # Add order reference columnas
                         alt_selected['order_sup'] = sup
                         alt_selected['order_model'] = model
                         alt_selected['order_coldes'] = coldes
@@ -1399,7 +1399,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                         alt_qty = alt_selected['pesokgs'].sum()
                         total_imported_qty += alt_qty
                         complement_items.append(alt_selected)
-                        print(f"    ✓ Added {len(alt_selected)} items ({alt_qty:.2f} kg) from alternative")
+                        print(f"    ✓ Agregados {len(alt_selected)} items ({alt_qty:.2f} kg) de la alternativa")
 
                 # Combine all complement items
                 if complement_items:
@@ -1408,66 +1408,66 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     # Validate FIFO compliance
                     is_fifo_compliant = validate_fifo_compliance(combined_items)
                     if not is_fifo_compliant:
-                        print(f"  WARNING: Selected items may not be FIFO compliant!")
+                        print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
 
                     # Log summary
                     unique_ingresos = combined_items['idingreso'].unique()
                     num_items = len(combined_items)
 
                     print(f"\n  {'─'*76}")
-                    print(f"  ✓ ORDER COMPLEMENTED")
+                    print(f"  ✓ PEDIDO COMPLEMENTADO")
                     print(f"  {'─'*76}")
-                    print(f"    Items added: {num_items} items")
-                    print(f"    Weight added: {total_imported_qty:.2f} kg (needed: {qty_needed:.2f} kg)")
-                    print(f"    From {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
+                    print(f"    Ítems agregados: {num_items} items")
+                    print(f"    Peso agregado: {total_imported_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
+                    print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
                     print(f"  {'─'*76}\n")
 
                     # Warn if still short
                     if total_imported_qty < qty_needed:
                         shortage = qty_needed - total_imported_qty
-                        print(f"  ⚠ PARTIAL FULFILLMENT: Short by {shortage:.2f} kg")
+                        print(f"  ⚠ CUMPLIMIENTO PARCIAL: Faltante de {shortage:.2f} kg")
 
                     all_selected_items.append(combined_items)
                 else:
-                    print(f"  ✗ Could not select items from alternative")
+                    print(f"  ✗ No se pudieron seleccionar ítems from alternative")
                     failed_orders.append({
                         'order_num': order_num,
                         'sup': sup,
                         'model': model,
                         'coldes': coldes,
                         'qty_needed': qty_needed,
-                        'error': f'{error_msg} (complement failed)',
+                        'error': f'{error_msg} (complemento falló)',
                         'alternatives': len(similar_products)
                     })
 
             # Handle CANCEL option
             elif response == 'n':
-                print(f"  ✗ Product cancelled by user")
+                print(f"  ✗ Producto cancelado por usuario")
                 failed_orders.append({
                     'order_num': order_num,
                     'sup': sup,
                     'model': model,
                     'coldes': coldes,
                     'qty_needed': qty_needed,
-                    'error': f'{error_msg} (cancelled by user)',
+                    'error': f'{error_msg} (cancelado por usuario)',
                     'alternatives': len(similar_products)
                 })
 
             # Handle invalid input
             else:
-                print(f"  ✗ Invalid option selected")
+                print(f"  ✗ Opción inválida seleccionada")
                 failed_orders.append({
                     'order_num': order_num,
                     'sup': sup,
                     'model': model,
                     'coldes': coldes,
                     'qty_needed': qty_needed,
-                    'error': f'{error_msg} (invalid option)',
+                    'error': f'{error_msg} (opción inválida)',
                     'alternatives': len(similar_products)
                 })
 
         print(f"\n{'='*80}")
-        print(f"REVIEW COMPLETE: Processed {len(products_needing_review)} product(s)")
+        print(f"REVISIÓN COMPLETA: Procesados {len(products_needing_review)} producto(s)")
         print(f"{'='*80}\n")
 
         # Re-combine all selected items if any were added during review
@@ -1478,14 +1478,14 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
     # Report on failed orders if any
     if failed_orders:
         print(f"\n{'='*80}")
-        print(f"FAILED ORDERS SUMMARY: {len(failed_orders)} order(s) could not be processed")
+        print(f"RESUMEN DE PEDIDOS FALLIDOS: {len(failed_orders)} pedido(s) no pudieron ser procesados")
         print(f"{'='*80}")
         for failed in failed_orders:
-            print(f"  Order #{failed['order_num']}: sup={failed['sup']}, model={failed['model']}, "
+            print(f"  Pedido #{failed['order_num']}: sup={failed['sup']}, model={failed['model']}, "
                   f"coldes={failed['coldes']}, qty={failed['qty_needed']} kg")
             print(f"    Error: {failed['error']}")
             if 'alternatives' in failed and failed['alternatives'] > 0:
-                print(f"    Note: {failed['alternatives']} similar product(s) were found but not selected")
+                print(f"    Nota: {failed['alternatives']} producto(s) similar(es) fueron encontrados pero no seleccionados")
         print(f"{'='*80}\n")
 
     # Combine all selected items
@@ -1500,7 +1500,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                 'itemno': 'count'  # Count of items
             }).reset_index()
 
-            # Rename columns for clarity
+            # Rename columnas for clarity
             grouped_df.columns = ['incoterm', 'idmodelo', 'idcoldis', 'idingreso', 'total_pesokgs', 'item_count']
 
             # Sort by incoterm, idmodelo, idcoldis, and idingreso
@@ -1510,43 +1510,43 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
             )
 
             grouped_df.to_excel(output_path, index=False)
-            print(f"\nExcel verification table saved to: {output_path}")
-            print(f"Please review the order details before proceeding.")
+            print(f"\nExcel de verificacion guardado en: {output_path}")
+            print(f"Por favor revise los detalles del pedido antes de continuar.")
 
             # Generate DBF files if requested
             if generate_dbf:
                 # Display order summary and incoterms
                 print(f"\n{'='*80}")
-                print("ORDER VERIFICATION REQUIRED")
+                print("VERIFICACIÓN DE PEDIDO REQUERIDA")
                 print(f"{'='*80}")
-                print(f"Successfully processed: {len(all_selected_items)} product(s)")
+                print(f"Procesados exitosamente: {len(all_selected_items)} producto(s)")
                 if failed_orders:
-                    print(f"Failed to process: {len(failed_orders)} product(s) (see summary above)")
-                print(f"\nTotal items to be exported: {len(result_df)}")
-                print(f"Total weight: {result_df['pesokgs'].sum():.2f} kg")
-                print(f"\nExcel verification table: {output_path}")
+                    print(f"Falló el procesamiento: {len(failed_orders)} producto(s) (ver resumen arriba)")
+                print(f"\nTotal items a ser importados: {len(result_df)}")
+                print(f"Peso total: {result_df['pesokgs'].sum():.2f} kg")
+                print(f"\nExcel de verificacion: {output_path}")
 
                 # Display incoterms in the order
                 available_incoterms = sorted(result_df['order_idcoflete'].unique().tolist())
                 print(f"\n{'='*80}")
-                print(f"INCOTERM BREAKDOWN ({len(available_incoterms)} incoterm(s) in this order)")
+                print(f"DESGLOSE POR INCOTERM ({len(available_incoterms)} incoterm(s) en este pedido)")
                 print(f"{'='*80}")
                 for i, incoterm in enumerate(available_incoterms, 1):
                     incoterm_data = result_df[result_df['order_idcoflete'] == incoterm]
                     item_count = len(incoterm_data)
                     total_weight = incoterm_data['pesokgs'].sum()
-                    print(f"  [{i}] {incoterm}: {item_count} items, {total_weight:.2f} kg")
+                    print(f"  [{i}] {incoterm}: {item_count} ítems, {total_weight:.2f} kg")
 
                 print(f"\n{'='*80}")
-                print("DBF GENERATION OPTIONS")
+                print("OPCIONES DE GENERACIÓN DBF")
                 print(f"{'='*80}")
-                print("  [1] Import ALL incoterms")
-                print("  [2] Import SOME incoterms (you'll select which ones)")
-                print("  [3] DOWNLOAD inventory for specific incoterm(s) (to add more products)")
-                print("  [4] CANCEL (don't generate DBF files)")
+                print("  [1] Importar TODOS los incoterms")
+                print("  [2] Importar ALGUNOS incoterms (seleccionará cuáles)")
+                print("  [3] DESCARGAR inventario para incoterm(s) específico(s) (para agregar más productos)")
+                print("  [4] CANCELAR (no generar archivos DBF)")
                 print(f"{'='*80}\n")
 
-                dbf_choice = input(">> Your choice (1/2/3/4): ").strip()
+                dbf_choice = input(">> Su elección (1/2/3/4): ").strip()
 
                 if dbf_choice in ['1', '2']:
                     output_dir = os.path.dirname(output_path)
@@ -1563,7 +1563,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     elif dbf_choice == '2':
                         # Import SOME incoterms - ask which ones
                         print(f"\n{'='*80}")
-                        print("SELECT INCOTERMS TO IMPORT")
+                        print("SELECCIONAR INCOTERMS A IMPORTAR")
                         print(f"{'='*80}")
 
                         # Re-display the incoterm list for easy reference
@@ -1571,17 +1571,17 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                             incoterm_data = result_df[result_df['order_idcoflete'] == incoterm]
                             item_count = len(incoterm_data)
                             total_weight = incoterm_data['pesokgs'].sum()
-                            print(f"  [{i}] {incoterm}: {item_count} items, {total_weight:.2f} kg")
+                            print(f"  [{i}] {incoterm}: {item_count} ítems, {total_weight:.2f} kg")
 
                         # Add "import all" option if there are more than 2 incoterms
                         if len(available_incoterms) == 2:
-                            print(f"  [3] Import ALL (both incoterms)")
+                            print(f"  [3] Importar TODOS (ambos incoterms)")
                             print(f"\nEnter your choice (1, 2, or 3):\n")
                         else:
-                            print(f"\nEnter the number(s) of the incoterm(s) you want to import")
+                            print(f"\nEnter the number(s) of the incoterm(s) you want a import")
                             print(f"(comma-separated for multiple, e.g., '1,2,3')\n")
 
-                        incoterm_response = input(">> Your selection: ").strip()
+                        incoterm_response = input(">> Su selección: ").strip()
 
                         # Handle special case: option 3 for "import all" when there are exactly 2 incoterms
                         if len(available_incoterms) == 2 and incoterm_response == '3':
@@ -1600,10 +1600,10 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                                     if 1 <= idx <= len(available_incoterms):
                                         selected_incoterms.append(available_incoterms[idx - 1])
                                     else:
-                                        print(f"Warning: Invalid index {idx}, skipping...")
+                                        print(f"Advertencia: Índice inválido {idx}, omitiendo...")
 
                                 if selected_incoterms:
-                                    print(f"\n✓ Generating DBF files for {len(selected_incoterms)} selected incoterm(s): {', '.join(selected_incoterms)}")
+                                    print(f"\n✓ Generating DBF files for {len(selected_incoterms)} incoterm(s) seleccionado(s): {', '.join(selected_incoterms)}")
                                     generated = generate_dbf_order(result_df, source_filename, output_dir, engine, selected_incoterms=selected_incoterms)
                                     if generated:
                                         dbf_generated = True
@@ -1612,14 +1612,14 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                                         # Show which incoterms were NOT generated
                                         skipped_incoterms = [inc for inc in available_incoterms if inc not in generated]
                                         if skipped_incoterms:
-                                            print(f"  Note: {len(skipped_incoterms)} incoterm(s) not generated: {', '.join(skipped_incoterms)}")
+                                            print(f"  Nota: {len(skipped_incoterms)} incoterm(s) no generados: {', '.join(skipped_incoterms)}")
                                 else:
-                                    print("\nNo valid incoterms selected. DBF generation cancelled.")
+                                    print("\nNo valid incoterms selected. Generación DBF cancelada.")
 
                             except ValueError:
                                 print(f"\nInvalid input format: '{incoterm_response}'")
-                                print("Please use comma-separated numbers (e.g., '1,2,3')")
-                                print("DBF generation cancelled.")
+                                print("Por favor use números separados por comas (ej., '1,2,3')")
+                                print("Generación DBF cancelada.")
 
                 elif dbf_choice == '3':
                     # Download inventory for specific incoterm(s)
@@ -1630,9 +1630,9 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     client_code = get_client_code(engine, first_idcontacto)
 
                     print(f"\n{'='*80}")
-                    print("SELECT INCOTERM(S) FOR INVENTORY DOWNLOAD")
+                    print("SELECCIONAR INCOTERM(S) PARA DESCARGA DE INVENTARIO")
                     print(f"{'='*80}")
-                    print("Which incoterm(s) do you want to download inventory for?")
+                    print("¿Para cuál(es) incoterm(s) desea descargar inventario?")
                     print(f"{'─'*80}")
 
                     # Display the incoterm list
@@ -1640,15 +1640,15 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                         incoterm_data = result_df[result_df['order_idcoflete'] == incoterm]
                         item_count = len(incoterm_data)
                         total_weight = incoterm_data['pesokgs'].sum()
-                        print(f"  [{i}] {incoterm}: {item_count} items, {total_weight:.2f} kg (currently in order)")
+                        print(f"  [{i}] {incoterm}: {item_count} ítems, {total_weight:.2f} kg (actualmente en pedido)")
 
                     if len(available_incoterms) > 1:
-                        print(f"  [{len(available_incoterms) + 1}] ALL incoterms (download all)")
+                        print(f"  [{len(available_incoterms) + 1}] TODOS los incoterms (descargar todos)")
 
                     print(f"\nEnter the number(s) of the incoterm(s) you want inventory for")
                     print(f"(comma-separated for multiple, e.g., '1,2')\n")
 
-                    inventory_response = input(">> Your selection: ").strip()
+                    inventory_response = input(">> Su selección: ").strip()
 
                     # Handle "download all" option
                     if inventory_response == str(len(available_incoterms) + 1):
@@ -1657,11 +1657,11 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
 
                         if inventory_path:
                             print(f"\n{'='*80}")
-                            print(f"INVENTORY DOWNLOADED")
+                            print(f"INVENTARIO DESCARGADO")
                             print(f"{'='*80}")
-                            print(f"Inventory file: {inventory_path}")
-                            print(f"You can now review this file and add more products to your order.")
-                            print(f"After updating the order, rerun this script to generate DBF files.")
+                            print(f"Archivo de inventario: {inventory_path}")
+                            print(f"Ahora puede revisar este archivo y agregar más productos a su pedido.")
+                            print(f"Después de actualizar el pedido, vuelva a ejecutar este script para generar archivos DBF.")
                             print(f"{'='*80}\n")
                     else:
                         # Parse comma-separated numbers
@@ -1673,7 +1673,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                                 if 1 <= idx <= len(available_incoterms):
                                     selected_inventory_incoterms.append(available_incoterms[idx - 1])
                                 else:
-                                    print(f"Warning: Invalid index {idx}, skipping...")
+                                    print(f"Advertencia: Índice inválido {idx}, omitiendo...")
 
                             if selected_inventory_incoterms:
                                 print(f"\n✓ Downloading inventory for {len(selected_inventory_incoterms)} incoterm(s): {', '.join(selected_inventory_incoterms)}...")
@@ -1681,45 +1681,45 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
 
                                 if inventory_path:
                                     print(f"\n{'='*80}")
-                                    print(f"INVENTORY DOWNLOADED")
+                                    print(f"INVENTARIO DESCARGADO")
                                     print(f"{'='*80}")
-                                    print(f"Inventory file: {inventory_path}")
-                                    print(f"You can now review this file and add more products to your order.")
-                                    print(f"After updating the order, rerun this script to generate DBF files.")
+                                    print(f"Archivo de inventario: {inventory_path}")
+                                    print(f"Ahora puede revisar este archivo y agregar más productos a su pedido.")
+                                    print(f"Después de actualizar el pedido, vuelva a ejecutar este script para generar archivos DBF.")
                                     print(f"{'='*80}\n")
                             else:
-                                print("\nNo valid incoterms selected. Inventory download cancelled.")
+                                print("\nNo valid incoterms selected. Descarga de inventario cancelada.")
 
                         except ValueError:
                             print(f"\nInvalid input format: '{inventory_response}'")
                             print("Please use comma-separated numbers (e.g., '1,2')")
-                            print("Inventory download cancelled.")
+                            print("Descarga de inventario cancelada.")
 
                 elif dbf_choice == '4':
-                    print("\nDBF generation cancelled by user.")
-                    print("You can review the Excel file and run the script again when ready.")
+                    print("\nCreacion de tablas ,DBF cancelada por el usuario.")
+                    print("Puede revisar el archivo Excel y ejecutar el script nuevamente cuando esté listo.")
                 else:
-                    print("\nInvalid option selected.")
-                    print("You can review the Excel file and run the script again when ready.")
+                    print("\nOpcion invalida seleccionada.")
+                    print("Puede revisar el archivo Excel y ejecutar el script nuevamente cuando esté listo.")
 
         return result_df, dbf_generated
     else:
         print("\nNo items were selected")
         if failed_orders:
-            print(f"All {len(failed_orders)} order(s) failed to process. See errors above.")
+            print(f"Todos los {len(failed_orders)} pedido(s) fallaron en el procesamiento. Ver errores arriba.")
         return pd.DataFrame(), dbf_generated
 
 
 if __name__ == "__main__":
-    # Use file picker to select Excel file
-    print("Please select the Excel order file...")
+    # Use file picker a select Excel file
+    print("Por favor seleccione el archivo de pedido Excel...")
     excel_file = select_excel_file()
 
     if not excel_file:
-        print("No file selected. Exiting.")
+        print("No se seleccionó archivo. Saliendo.")
         exit(0)
 
-    print(f"Selected file: {excel_file}")
+    print(f"Archivo seleccionado: {excel_file}")
 
     # Generate output path in same directory as input file
     output_dir = os.path.dirname(excel_file)
@@ -1733,14 +1733,14 @@ if __name__ == "__main__":
         generate_dbf=True
     )
 
-    print(f"\nTotal items selected: {len(result)}")
+    print(f"\nTotal de ítems seleccionados: {len(result)}")
     if not result.empty:
-        print(f"Total weight: {result['pesokgs'].sum():.2f} kg")
-        print(f"\n✓ Processing complete!")
-        print(f"  - Excel output: {output_excel_path}")
+        print(f"Peso total: {result['pesokgs'].sum():.2f} kg")
+        print(f"\n✓ ¡Procesamiento completo!")
+        print(f"  - Salida Excel: {output_excel_path}")
         if dbf_generated:
-            print(f"  - DBF files: {output_dir}/{{filename}}_{{incoterm}}.dbf")
+            print(f"  - Archivos DBF: {output_dir}/{{filename}}_{{incoterm}}.dbf")
         else:
-            print(f"  - DBF files: Not generated (user cancelled or client confirmation pending)")
+            print(f"  - Archivos DBF: No generados (usuario canceló o confirmación de cliente pendiente)")
     else:
-        print("\n✗ No items selected")
+        print("\n✗ No se seleccionaron ítems")
