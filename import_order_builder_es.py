@@ -1,5 +1,6 @@
 import pandas as pd
 from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 import os
 from typing import List, Dict, Any, Optional, Tuple
 import unicodedata
@@ -17,16 +18,23 @@ except ImportError:
     TKINTER_AVAILABLE = False
     print("Nota: tkinter no disponible. El selector de archivos estará deshabilitado.")
 
-# Database configuration - modify these as needed
-DB_USER = "jm"
-DB_HOST = "127.0.0.1"
-DB_PORT = "9700"
-DB_NAME = "datax"
+
 
 
 def get_db_connection():
     """Create and return database engine connection."""
-    engine = create_engine(f"postgresql+psycopg2://{DB_USER}:@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+    load_dotenv(dotenv_path="./.env", override=True)
+
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_NAME = os.getenv("DB_NAME")
+
+    engine = create_engine(
+    f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
+
     return engine
 
 
@@ -834,6 +842,36 @@ def generate_inventory_by_incoterm(engine, output_dir: str, client_code: str, se
     return output_path
 
 
+def sanitize_filename(text: str) -> str:
+    """
+    Sanitize text to be used as part of a filename.
+    - Replace whitespaces with underscores
+    - Replace "++" with "plus"
+    - Replace other special characters with underscores
+
+    Args:
+        text: Text to sanitize
+
+    Returns:
+        Sanitized text safe for use in filenames
+    """
+    # Replace "++" with "plus" (must be done before single "+" replacement)
+    sanitized = text.replace('++', 'plus')
+
+    # Replace single "+" with "plus"
+    sanitized = sanitized.replace('+', 'plus')
+
+    # Replace whitespaces with underscores
+    sanitized = sanitized.replace(' ', '_')
+
+    # Replace other common special characters with underscores
+    special_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+    for char in special_chars:
+        sanitized = sanitized.replace(char, '_')
+
+    return sanitized
+
+
 def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output_dir: str = None, engine=None, selected_incoterms: List[str] = None) -> List[str]:
     """
     Generate DBF file from the results, with individual items (not grouped).
@@ -902,8 +940,12 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
         print(f"  Numero: {numero}")
         print(f"  Código de cliente: {client_code}")
 
-        # Create DBF filename: numero_idcoflete.dbf
-        dbf_filename = f"{numero}_{idcoflete}.dbf"
+        # Sanitize incoterm for use in filename (replace spaces with _, ++ with plus, etc.)
+        sanitized_incoterm = sanitize_filename(str(idcoflete))
+        print(f"  Incoterm sanitizado para nombre de archivo: {sanitized_incoterm}")
+
+        # Create DBF filename: numero_sanitized_idcoflete.dbf
+        dbf_filename = f"{numero}_{sanitized_incoterm}.dbf"
         dbf_path = os.path.join(dbf_output_dir, dbf_filename) if dbf_output_dir else dbf_filename
 
         # Define DBF structure with explicit field types, widths, and decimal places
