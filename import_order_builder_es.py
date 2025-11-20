@@ -9,6 +9,14 @@ import dbf
 import subprocess
 import sys
 
+
+class FuzzyMatchFoundException(Exception):
+    """Exception raised when fuzzy matches are found and need user review."""
+    def __init__(self, message, close_matches, coldes):
+        super().__init__(message)
+        self.close_matches = close_matches
+        self.coldes = coldes
+
 # Try a import tkinter, but make it optional
 try:
     from tkinter import Tk, filedialog
@@ -444,16 +452,14 @@ def get_incoterm_for_product(engine, sup: str, model: str, coldes: str) -> Tuple
                     print(f"\n  Buscando: '{coldes}'")
                     best_match_idx, best_match_row, best_match_sim = close_matches[0]
                     print(f"  Mejor coincidencia: [{best_match_idx}] '{best_match_row[2]}' (similitud: {best_match_sim:.2%})")
+                    print(f"  → Se solicitará confirmación al final")
 
-                    # Ask user for confirmation
-                    response = input(f"\n  >> ¿Usar esta coincidencia? (s/n/t para 'sí a todas las similares'): ").strip().lower()
-
-                    if response in ['y', 'yes', 'a', 'all']:
-                        print(f"  ✓ Usando valor de base de datos: '{best_match_row[2]}' con idcoflete: '{best_match_row[5]}'")
-                        return best_match_row[5], best_match_row[2]  # Return (idcoflete, matched_coldes)
-                    else:
-                        print(f"  ✗ Coincidencia rechazada por usuario")
-                        raise ValueError(f"No se encontró incoterm para sup={sup}, model={model}, coldes={coldes} (usuario rechazó coincidencia difusa)")
+                    # DEFER PROMPT: Raise exception with match info instead of prompting now
+                    raise FuzzyMatchFoundException(
+                        f"Coincidencias difusas encontradas para sup={sup}, model={model}, coldes={coldes}",
+                        close_matches,
+                        coldes
+                    )
                 else:
                     print(f"  No se encontraron coincidencias cercanas (umbral de similitud: 80%)")
             else:
@@ -471,6 +477,7 @@ def get_available_items(engine, sup: str, model: str, coldes: str, idcoflete: st
     3. Finally by itemno for consistency
 
     Includes c.idcoflete in the result so we can track which incoterm each item came from.
+    Includes i.inicial (CBM value) for volume calculations.
     """
     query = text("""
         SELECT i.*, c.idcoflete as source_idcoflete
@@ -896,6 +903,7 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
     17. idubica1 - C(6): Secondary location ID (from insaldo)
     18. client - C(10): Client code (idcentro)
     19. idcoflete - C(6): Incoterm code
+    20. cbm - N(10,4): CBM value (from inicial field)
 
     Args:
         result_df: DataFrame with selected items
@@ -962,6 +970,7 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
             'idubica C(6)',      # Location ID
             'idreceiver C(4)',   # Receiver ID
             'cantidad N(10,2)',  # Quantity (Numeric with 2 decimals)
+            'cbm N(14,6)',       # CBM value (from inicial field) - numeric(14,6)
             'fecrec D',          # Reception date (Date)
             'scanned L',         # Scanned flag (Logical)
             'available L',       # Available flag (Logical)
@@ -988,8 +997,11 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
             # Get idubica1 from the row (should be in insaldo data)
             idubica1 = str(row.get('idubica1', ''))[:6] if pd.notna(row.get('idubica1')) else ''
 
+            # Get CBM value from inicial field (numerical, same logic as pesokgs)
+            cbm_value = float(row['inicial']) if pd.notna(row.get('inicial')) else 0.0
+
             # Debug: print individual row data
-            print(f"    Ítem DBF: numero={numero}, idproducto={idproducto}, cantidad={row['pesokgs']:.2f}, client={client_code}, idcoflete={idcoflete}")
+            print(f"    Ítem DBF: numero={numero}, idproducto={idproducto}, cantidad={row['pesokgs']:.2f}, cbm={cbm_value:.4f}, client={client_code}, idcoflete={idcoflete}")
 
             # Add record a DBF table
             # Empty D (Date) fields should be None, empty L (Logical) should be False or None
@@ -1012,7 +1024,8 @@ def generate_dbf_order(result_df: pd.DataFrame, source_filename: str, dbf_output
                 'equipo': '0001',
                 'idubica1': idubica1[:6],
                 'client': client_code[:10],  # Client code (idcentro)
-                'idcoflete': str(idcoflete)[:6]  # Incoterm code
+                'idcoflete': str(idcoflete)[:6],  # Incoterm code
+                'cbm': cbm_value  # CBM value from inicial field
             })
 
         # Close the table a save changes
@@ -1048,6 +1061,7 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
     all_selected_items = []
     failed_orders = []  # Track orders with discrepancies/errors
     products_needing_review = []  # Track products that need user review (deferred prompts)
+    fuzzy_matches_needing_review = []  # Track products with fuzzy matches (deferred prompts)
 
     # Process each order line
     for row_idx, order_row in orders_df.iterrows():
@@ -1098,7 +1112,8 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     total_available = available_items['pesokgs'].sum()
                     matched_coldes = coldes
                     product_found = True
-                    quantity_sufficient = total_available >= qty_needed
+                    # Use tolerance for float comparison to avoid precision issues (e.g., 745.70 == 745.70)
+                    quantity_sufficient = total_available >= (qty_needed - 0.01)
 
                     # Determine which incoterm(s) will be used
                     oldest_idingreso = available_items.iloc[0]['idingreso']
@@ -1146,7 +1161,8 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                 available_items = get_available_items(engine, sup, model, matched_coldes, idcoflete)
                 product_found = not available_items.empty
                 total_available = available_items['pesokgs'].sum() if product_found else 0.0
-                quantity_sufficient = total_available >= qty_needed if product_found else False
+                # Use tolerance for float comparison to avoid precision issues
+                quantity_sufficient = total_available >= (qty_needed - 0.01) if product_found else False
 
             # Handle cases: product not found or insufficient quantity
             if not product_found or not quantity_sufficient:
@@ -1254,6 +1270,19 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
                     'alternatives': 0
                 })
 
+        except FuzzyMatchFoundException as e:
+            # Coincidencia difusa encontrada - diferir para revisión posterior
+            fuzzy_matches_needing_review.append({
+                'order_num': order_num,
+                'sup': sup,
+                'model': model,
+                'coldes': coldes,
+                'qty_needed': qty_needed,
+                'close_matches': e.close_matches,
+                'looking_for': e.coldes
+            })
+            continue
+
         except Exception as e:
             print(f"  ERROR procesando pedido: {str(e)}")
             failed_orders.append({
@@ -1269,246 +1298,320 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
 
     # DEFERRED PROMPTS: Handle products needing review (after all orders processed)
     if products_needing_review:
+        # Calculate totals
+        total_available = sum(p['available_qty'] for p in products_needing_review)
+        total_needed = sum(p['qty_needed'] for p in products_needing_review)
+        total_shortage = total_needed - total_available
+
+        # Group by model for better summary
+        from collections import defaultdict
+        model_groups = defaultdict(list)
+        for p in products_needing_review:
+            model_groups[p['model']].append(p)
+
         print(f"\n{'='*80}")
-        print(f"PRODUCTOS QUE REQUIEREN REVISIÓN: {len(products_needing_review)} producto(s) requieren su atención")
+        print(f"FALTANTES DETECTADOS")
         print(f"{'='*80}")
-        print("Los siguientes productos tuvieron problemas durante el procesamiento. Por favor revise las")
-        print("alternativas similares y seleccione cuáles usar.\n")
+        print(f"Se encontraron {len(products_needing_review)} producto(s) con faltantes en {len(model_groups)} modelo(s):")
+        print(f"  Total Disponible: {total_available:.2f} kg")
+        print(f"  Total Necesario:  {total_needed:.2f} kg")
+        print(f"  Total Faltante:   {total_shortage:.2f} kg")
+        print(f"{'='*80}\n")
 
-        for idx, product_info in enumerate(products_needing_review, 1):
-            order_num = product_info['order_num']
-            sup = product_info['sup']
-            model = product_info['model']
-            coldes = product_info['coldes']
-            qty_needed = product_info['qty_needed']
-            available_qty = product_info['available_qty']
-            error_type = product_info['error_type']
-            error_msg = product_info['error_msg']
-            similar_products = product_info['similar_products']
+        # Show breakdown by model
+        for model, products in sorted(model_groups.items()):
+            model_available = sum(p['available_qty'] for p in products)
+            model_needed = sum(p['qty_needed'] for p in products)
+            model_shortage = model_needed - model_available
+            print(f"  Modelo: {model}")
+            print(f"    Disponible: {model_available:.2f} kg | Necesario: {model_needed:.2f} kg | Faltante: {model_shortage:.2f} kg")
+            for p in products:
+                print(f"      - {p['coldes']}: Disponible {p['available_qty']:.2f} kg, Necesario {p['qty_needed']:.2f} kg")
+            print()
+        print(f"{'='*80}\n")
 
-            print(f"\n{'─'*76}")
-            print(f"Producto {idx}/{len(products_needing_review)}: Pedido #{order_num}")
-            print(f"{'─'*76}")
-            print(f"  Original: sup={sup}, model={model}, coldes={coldes}, cant_necesaria={qty_needed} kg")
-            print(f"  Problema: {error_msg}")
-            print(f"\n  PRODUCTOS SIMILARES ENCONTRADOS: {len(similar_products)} alternativa(s)")
-            print(f"  {'─'*76}")
+        # Show explanation of options
+        print("Si responde 'n' (no):")
+        print("  - Acepta automáticamente cantidades parciales para TODOS los productos")
+        print("  - Muestra cada producto mientras se importa")
+        print("  - ¡No se requiere revisión manual!")
+        print("\nSi responde 's' (sí):")
+        print("  - Muestra revisión detallada uno por uno")
+        print("  - Puede seleccionar alternativas, parcial, o cancelar para cada producto")
+        print()
 
-            # Display top 5 similar products
-            for alt_idx, (_, alt_product) in enumerate(similar_products.head(5).iterrows(), 1):
-                print(f"  [{alt_idx}] Modelo: {alt_product['idmodelo']} | Color: {alt_product['idcoldis']} | "
-                      f"Incoterm: {alt_product['idcoflete']}")
-                print(f"      Disponible: {alt_product['total_available_kg']:.2f} kg | "
-                      f"Model similarity: {alt_product['model_similarity']:.1%} | "
-                      f"Color similarity: {alt_product['color_similarity']:.1%}")
+        # Ask if user wants to review alternatives
+        while True:
+            review_choice = input(">> ¿Revisar alternativas para estos productos? (s/n): ").strip().lower()
+            if review_choice in ['s', 'si', 'sí', 'y', 'yes', 'n', 'no']:
+                break
+            else:
+                print(f"  ✗ Opción inválida '{review_choice}'. Por favor ingrese s o n.")
 
-            # Display available options
-            print(f"\n  {'─'*76}")
-            print(f"  OPCIONES DISPONIBLES:")
-            print(f"  {'─'*76}")
-            if available_qty > 0:
-                print(f"  [p] PARCIAL - Importar solo los {available_qty:.2f} kg disponibles (cumplimiento parcial)")
-            print(f"  [1-{min(5, len(similar_products))}] COMPLEMENTAR - Importar {available_qty:.2f} kg disponibles + alternativa seleccionada")
-            print(f"  [n] CANCELAR - Omitir este producto completamente (no importar nada)")
-            print(f"  {'─'*76}")
-
-            # Prompt user a select option
-            response = input(f"\n  >> Su elección: ").strip().lower()
-
-            # Handle PARTIAL import option
-            if response == 'p' and available_qty > 0:
-                print(f"  ✓ Importando cantidad parcial: {available_qty:.2f} kg")
-
-                # Get available items for the original product
+        # If user doesn't want to review, accept partial for all
+        if review_choice in ['n', 'no']:
+            print(f"\n✓ Aceptando cantidades parciales para todos los {len(products_needing_review)} producto(s)...")
+            for product_info in products_needing_review:
+                available_qty = product_info['available_qty']
                 available_items = product_info['available_items']
 
-                if not available_items.empty:
-                    # Select items for partial fulfillment
+                if available_qty > 0 and not available_items.empty:
                     selected_items = select_items_for_order(available_items, available_qty)
-
                     if not selected_items.empty:
-                        # Validate FIFO compliance
-                        is_fifo_compliant = validate_fifo_compliance(selected_items)
-                        if not is_fifo_compliant:
-                            print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
-
-                        # Add order reference columnas
-                        selected_items['order_sup'] = sup
-                        selected_items['order_model'] = model
-                        selected_items['order_coldes'] = coldes
-                        selected_items['order_qty_needed'] = qty_needed
+                        # Add order reference columns
+                        selected_items['order_sup'] = product_info['sup']
+                        selected_items['order_model'] = product_info['model']
+                        selected_items['order_coldes'] = product_info['coldes']
+                        selected_items['order_qty_needed'] = product_info['qty_needed']
                         selected_items['order_idcoflete'] = selected_items['source_idcoflete']
-
-                        # Log details
-                        unique_ingresos = selected_items['idingreso'].unique()
-                        actual_qty = selected_items['pesokgs'].sum()
-                        num_items = len(selected_items)
-
-                        print(f"\n  {'─'*76}")
-                        print(f"  ✓ PEDIDO PARCIAL IMPORTADO")
-                        print(f"  {'─'*76}")
-                        print(f"    Ítems agregados: {num_items} items")
-                        print(f"    Peso agregado: {actual_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
-                        print(f"    Faltante: {qty_needed - actual_qty:.2f} kg")
-                        print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
-                        print(f"  {'─'*76}\n")
-
                         all_selected_items.append(selected_items)
+                        print(f"  ✓ {product_info['model']} - {product_info['coldes']}: {available_qty:.2f} kg")
+            print(f"\n✓ Importados {total_available:.2f} kg (cumplimiento parcial)")
+        else:
+            # User wants to review - show the detailed review interface
+            print(f"\n{'='*80}")
+            print(f"REVISANDO PRODUCTOS: {len(products_needing_review)} producto(s)")
+            print(f"{'='*80}")
+            print("Por favor revise las alternativas similares y seleccione cuáles usar.\n")
+
+            for idx, product_info in enumerate(products_needing_review, 1):
+                order_num = product_info['order_num']
+                sup = product_info['sup']
+                model = product_info['model']
+                coldes = product_info['coldes']
+                qty_needed = product_info['qty_needed']
+                available_qty = product_info['available_qty']
+                error_type = product_info['error_type']
+                error_msg = product_info['error_msg']
+                similar_products = product_info['similar_products']
+
+                print(f"\n{'─'*76}")
+                print(f"Producto {idx}/{len(products_needing_review)}: Pedido #{order_num}")
+                print(f"{'─'*76}")
+                print(f"  Original: sup={sup}, model={model}, coldes={coldes}, cant_necesaria={qty_needed} kg")
+                print(f"  Problema: {error_msg}")
+                print(f"\n  PRODUCTOS SIMILARES ENCONTRADOS: {len(similar_products)} alternativa(s)")
+                print(f"  {'─'*76}")
+
+                # Display top 5 similar products
+                for alt_idx, (_, alt_product) in enumerate(similar_products.head(5).iterrows(), 1):
+                    print(f"  [{alt_idx}] Modelo: {alt_product['idmodelo']} | Color: {alt_product['idcoldis']} | "
+                          f"Incoterm: {alt_product['idcoflete']}")
+                    print(f"      Disponible: {alt_product['total_available_kg']:.2f} kg | "
+                          f"Model similarity: {alt_product['model_similarity']:.1%} | "
+                          f"Color similarity: {alt_product['color_similarity']:.1%}")
+
+                # Display available options
+                print(f"\n  {'─'*76}")
+                print(f"  OPCIONES DISPONIBLES:")
+                print(f"  {'─'*76}")
+                if available_qty > 0:
+                    print(f"  [p] PARCIAL - Importar solo los {available_qty:.2f} kg disponibles (cumplimiento parcial)")
+                print(f"  [1-{min(5, len(similar_products))}] COMPLEMENTAR - Importar {available_qty:.2f} kg disponibles + alternativa seleccionada")
+                print(f"  [n] CANCELAR - Omitir este producto completamente (no importar nada)")
+                print(f"  {'─'*76}")
+
+                # Prompt user a select option with validation loop
+                while True:
+                    response = input(f"\n  >> Su elección (p/1-{min(5, len(similar_products))}/n): ").strip().lower()
+
+                    # Validate input
+                    valid_options = ['p', 'n'] if available_qty > 0 else ['n']
+                    valid_numbers = list(range(1, min(5, len(similar_products)) + 1))
+
+                    is_valid = (response in valid_options or
+                               (response.isdigit() and int(response) in valid_numbers))
+
+                    if is_valid:
+                        break
                     else:
-                        print(f"  ✗ No se pudieron seleccionar ítems para importación parcial")
+                        print(f"  ✗ Opción inválida '{response}'. Por favor ingrese una opción válida.")
+                        if available_qty > 0:
+                            print(f"     Opciones válidas: p, 1-{min(5, len(similar_products))}, o n")
+                        else:
+                            print(f"     Opciones válidas: 1-{min(5, len(similar_products))} o n")
+
+                # Handle PARTIAL import option
+                if response == 'p' and available_qty > 0:
+                    print(f"  ✓ Importando cantidad parcial: {available_qty:.2f} kg")
+
+                    # Get available items for the original product
+                    available_items = product_info['available_items']
+
+                    if not available_items.empty:
+                        # Select items for partial fulfillment
+                        selected_items = select_items_for_order(available_items, available_qty)
+
+                        if not selected_items.empty:
+                            # Validate FIFO compliance
+                            is_fifo_compliant = validate_fifo_compliance(selected_items)
+                            if not is_fifo_compliant:
+                                print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
+
+                            # Add order reference columnas
+                            selected_items['order_sup'] = sup
+                            selected_items['order_model'] = model
+                            selected_items['order_coldes'] = coldes
+                            selected_items['order_qty_needed'] = qty_needed
+                            selected_items['order_idcoflete'] = selected_items['source_idcoflete']
+
+                            # Log details
+                            unique_ingresos = selected_items['idingreso'].unique()
+                            actual_qty = selected_items['pesokgs'].sum()
+                            num_items = len(selected_items)
+
+                            print(f"\n  {'─'*76}")
+                            print(f"  ✓ PEDIDO PARCIAL IMPORTADO")
+                            print(f"  {'─'*76}")
+                            print(f"    Ítems agregados: {num_items} items")
+                            print(f"    Peso agregado: {actual_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
+                            print(f"    Faltante: {qty_needed - actual_qty:.2f} kg")
+                            print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
+                            print(f"  {'─'*76}\n")
+
+                            all_selected_items.append(selected_items)
+                        else:
+                            print(f"  ✗ No se pudieron seleccionar ítems para importación parcial")
+                            failed_orders.append({
+                                'order_num': order_num,
+                                'sup': sup,
+                                'model': model,
+                                'coldes': coldes,
+                                'qty_needed': qty_needed,
+                                'error': f'{error_msg} (importación parcial falló)',
+                                'alternatives': len(similar_products)
+                            })
+                    else:
+                        print(f"  ✗ No hay ítems disponibles para importar")
                         failed_orders.append({
                             'order_num': order_num,
                             'sup': sup,
                             'model': model,
                             'coldes': coldes,
                             'qty_needed': qty_needed,
-                            'error': f'{error_msg} (importación parcial falló)',
+                            'error': error_msg,
                             'alternatives': len(similar_products)
                         })
-                else:
-                    print(f"  ✗ No hay ítems disponibles para importar")
-                    failed_orders.append({
-                        'order_num': order_num,
-                        'sup': sup,
-                        'model': model,
-                        'coldes': coldes,
-                        'qty_needed': qty_needed,
-                        'error': error_msg,
-                        'alternatives': len(similar_products)
-                    })
 
-            # Handle COMPLEMENT with alternative option
-            elif response.isdigit() and 1 <= int(response) <= min(5, len(similar_products)):
-                selected_idx = int(response) - 1
-                alt_product = similar_products.iloc[selected_idx]
+                # Handle COMPLEMENT with alternative option
+                elif response.isdigit() and 1 <= int(response) <= min(5, len(similar_products)):
+                    selected_idx = int(response) - 1
+                    alt_product = similar_products.iloc[selected_idx]
 
-                # Use the alternative product a complement
-                alt_model = alt_product['idmodelo']
-                alt_coldes = alt_product['idcoldis']
-                alt_idcoflete = alt_product['idcoflete']
+                    # Use the alternative product a complement
+                    alt_model = alt_product['idmodelo']
+                    alt_coldes = alt_product['idcoldis']
+                    alt_idcoflete = alt_product['idcoflete']
 
-                print(f"  ✓ Complementando con alternativa: model={alt_model}, coldes={alt_coldes}, incoterm={alt_idcoflete}")
+                    print(f"  ✓ Complementando con alternativa: model={alt_model}, coldes={alt_coldes}, incoterm={alt_idcoflete}")
 
-                complement_items = []
-                total_imported_qty = 0.0
+                    complement_items = []
+                    total_imported_qty = 0.0
 
-                # Step 1: Import available quantity from original product (if any)
-                if available_qty > 0:
-                    print(f"  → Importando {available_qty:.2f} kg disponibles del producto original...")
-                    available_items = product_info['available_items']
+                    # Step 1: Import available quantity from original product (if any)
+                    if available_qty > 0:
+                        print(f"  → Importando {available_qty:.2f} kg disponibles del producto original...")
+                        available_items = product_info['available_items']
 
-                    if not available_items.empty:
-                        original_selected = select_items_for_order(available_items, available_qty)
+                        if not available_items.empty:
+                            original_selected = select_items_for_order(available_items, available_qty)
 
-                        if not original_selected.empty:
+                            if not original_selected.empty:
+                                # Add order reference columnas
+                                original_selected['order_sup'] = sup
+                                original_selected['order_model'] = model
+                                original_selected['order_coldes'] = coldes
+                                original_selected['order_qty_needed'] = qty_needed
+                                original_selected['order_idcoflete'] = original_selected['source_idcoflete']
+
+                                original_qty = original_selected['pesokgs'].sum()
+                                total_imported_qty += original_qty
+                                complement_items.append(original_selected)
+                                print(f"    ✓ Agregados {len(original_selected)} items ({original_qty:.2f} kg) del original")
+
+                    # Step 2: Calculate remaining quantity needed
+                    remaining_qty = qty_needed - total_imported_qty
+                    print(f"  → Cantidad restante necesaria: {remaining_qty:.2f} kg")
+
+                    # Step 3: Import from alternative a complement
+                    if remaining_qty > 0:
+                        print(f"  → Importando {remaining_qty:.2f} kg de la alternativa...")
+                        alt_available_items = get_available_items(engine, sup, alt_model, alt_coldes, alt_idcoflete)
+                        alt_total_available = alt_available_items['pesokgs'].sum()
+
+                        if alt_total_available < remaining_qty:
+                            print(f"    ⚠ La alternativa tiene cantidad insuficiente ({alt_total_available:.2f} kg < {remaining_qty:.2f} kg)")
+                            print(f"    Se usarán todos los {alt_total_available:.2f} kg disponibles de la alternativa")
+
+                        # Select ítems de alternative product
+                        alt_selected = select_items_for_order(alt_available_items, remaining_qty)
+
+                        if not alt_selected.empty:
                             # Add order reference columnas
-                            original_selected['order_sup'] = sup
-                            original_selected['order_model'] = model
-                            original_selected['order_coldes'] = coldes
-                            original_selected['order_qty_needed'] = qty_needed
-                            original_selected['order_idcoflete'] = original_selected['source_idcoflete']
+                            alt_selected['order_sup'] = sup
+                            alt_selected['order_model'] = model
+                            alt_selected['order_coldes'] = coldes
+                            alt_selected['order_qty_needed'] = qty_needed
+                            alt_selected['order_idcoflete'] = alt_selected['source_idcoflete']
 
-                            original_qty = original_selected['pesokgs'].sum()
-                            total_imported_qty += original_qty
-                            complement_items.append(original_selected)
-                            print(f"    ✓ Agregados {len(original_selected)} items ({original_qty:.2f} kg) del original")
+                            alt_qty = alt_selected['pesokgs'].sum()
+                            total_imported_qty += alt_qty
+                            complement_items.append(alt_selected)
+                            print(f"    ✓ Agregados {len(alt_selected)} items ({alt_qty:.2f} kg) de la alternativa")
 
-                # Step 2: Calculate remaining quantity needed
-                remaining_qty = qty_needed - total_imported_qty
-                print(f"  → Cantidad restante necesaria: {remaining_qty:.2f} kg")
+                    # Combine all complement items
+                    if complement_items:
+                        combined_items = pd.concat(complement_items, ignore_index=True)
 
-                # Step 3: Import from alternative a complement
-                if remaining_qty > 0:
-                    print(f"  → Importando {remaining_qty:.2f} kg de la alternativa...")
-                    alt_available_items = get_available_items(engine, sup, alt_model, alt_coldes, alt_idcoflete)
-                    alt_total_available = alt_available_items['pesokgs'].sum()
+                        # Validate FIFO compliance
+                        is_fifo_compliant = validate_fifo_compliance(combined_items)
+                        if not is_fifo_compliant:
+                            print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
 
-                    if alt_total_available < remaining_qty:
-                        print(f"    ⚠ La alternativa tiene cantidad insuficiente ({alt_total_available:.2f} kg < {remaining_qty:.2f} kg)")
-                        print(f"    Se usarán todos los {alt_total_available:.2f} kg disponibles de la alternativa")
+                        # Log summary
+                        unique_ingresos = combined_items['idingreso'].unique()
+                        num_items = len(combined_items)
 
-                    # Select ítems de alternative product
-                    alt_selected = select_items_for_order(alt_available_items, remaining_qty)
+                        print(f"\n  {'─'*76}")
+                        print(f"  ✓ PEDIDO COMPLEMENTADO")
+                        print(f"  {'─'*76}")
+                        print(f"    Ítems agregados: {num_items} items")
+                        print(f"    Peso agregado: {total_imported_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
+                        print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
+                        print(f"  {'─'*76}\n")
 
-                    if not alt_selected.empty:
-                        # Add order reference columnas
-                        alt_selected['order_sup'] = sup
-                        alt_selected['order_model'] = model
-                        alt_selected['order_coldes'] = coldes
-                        alt_selected['order_qty_needed'] = qty_needed
-                        alt_selected['order_idcoflete'] = alt_selected['source_idcoflete']
+                        # Warn if still short
+                        if total_imported_qty < qty_needed:
+                            shortage = qty_needed - total_imported_qty
+                            print(f"  ⚠ CUMPLIMIENTO PARCIAL: Faltante de {shortage:.2f} kg")
 
-                        alt_qty = alt_selected['pesokgs'].sum()
-                        total_imported_qty += alt_qty
-                        complement_items.append(alt_selected)
-                        print(f"    ✓ Agregados {len(alt_selected)} items ({alt_qty:.2f} kg) de la alternativa")
+                        all_selected_items.append(combined_items)
+                    else:
+                        print(f"  ✗ No se pudieron seleccionar ítems from alternative")
+                        failed_orders.append({
+                            'order_num': order_num,
+                            'sup': sup,
+                            'model': model,
+                            'coldes': coldes,
+                            'qty_needed': qty_needed,
+                            'error': f'{error_msg} (complemento falló)',
+                            'alternatives': len(similar_products)
+                        })
 
-                # Combine all complement items
-                if complement_items:
-                    combined_items = pd.concat(complement_items, ignore_index=True)
-
-                    # Validate FIFO compliance
-                    is_fifo_compliant = validate_fifo_compliance(combined_items)
-                    if not is_fifo_compliant:
-                        print(f"  ADVERTENCIA: ¡Los ítems seleccionados pueden no cumplir con FIFO!")
-
-                    # Log summary
-                    unique_ingresos = combined_items['idingreso'].unique()
-                    num_items = len(combined_items)
-
-                    print(f"\n  {'─'*76}")
-                    print(f"  ✓ PEDIDO COMPLEMENTADO")
-                    print(f"  {'─'*76}")
-                    print(f"    Ítems agregados: {num_items} items")
-                    print(f"    Peso agregado: {total_imported_qty:.2f} kg (necesarios: {qty_needed:.2f} kg)")
-                    print(f"    De {len(unique_ingresos)} idingreso(s): {', '.join(map(str, unique_ingresos))}")
-                    print(f"  {'─'*76}\n")
-
-                    # Warn if still short
-                    if total_imported_qty < qty_needed:
-                        shortage = qty_needed - total_imported_qty
-                        print(f"  ⚠ CUMPLIMIENTO PARCIAL: Faltante de {shortage:.2f} kg")
-
-                    all_selected_items.append(combined_items)
-                else:
-                    print(f"  ✗ No se pudieron seleccionar ítems from alternative")
+                # Handle CANCEL option
+                elif response == 'n':
+                    print(f"  ✗ Producto cancelado por usuario")
                     failed_orders.append({
                         'order_num': order_num,
                         'sup': sup,
                         'model': model,
                         'coldes': coldes,
                         'qty_needed': qty_needed,
-                        'error': f'{error_msg} (complemento falló)',
+                        'error': f'{error_msg} (cancelado por usuario)',
                         'alternatives': len(similar_products)
                     })
 
-            # Handle CANCEL option
-            elif response == 'n':
-                print(f"  ✗ Producto cancelado por usuario")
-                failed_orders.append({
-                    'order_num': order_num,
-                    'sup': sup,
-                    'model': model,
-                    'coldes': coldes,
-                    'qty_needed': qty_needed,
-                    'error': f'{error_msg} (cancelado por usuario)',
-                    'alternatives': len(similar_products)
-                })
-
-            # Handle invalid input
-            else:
-                print(f"  ✗ Opción inválida seleccionada")
-                failed_orders.append({
-                    'order_num': order_num,
-                    'sup': sup,
-                    'model': model,
-                    'coldes': coldes,
-                    'qty_needed': qty_needed,
-                    'error': f'{error_msg} (opción inválida)',
-                    'alternatives': len(similar_products)
-                })
-
-        print(f"\n{'='*80}")
+            print(f"\n{'='*80}")
         print(f"REVISIÓN COMPLETA: Procesados {len(products_needing_review)} producto(s)")
         print(f"{'='*80}\n")
 
@@ -1516,6 +1619,209 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
         if all_selected_items:
             # This will be used later when generating the result_df
             pass
+
+    # DEFERRED PROMPTS: Handle fuzzy matches needing review (after all orders processed)
+    if fuzzy_matches_needing_review:
+        # Calculate totals
+        total_needed = sum(p['qty_needed'] for p in fuzzy_matches_needing_review)
+
+        # Group by model for better summary
+        from collections import defaultdict
+        model_groups = defaultdict(list)
+        for p in fuzzy_matches_needing_review:
+            model_groups[p['model']].append(p)
+
+        print(f"\n{'='*80}")
+        print(f"COINCIDENCIAS DIFUSAS DETECTADAS")
+        print(f"{'='*80}")
+        print(f"Se encontraron {len(fuzzy_matches_needing_review)} producto(s) con coincidencias difusas de color en {len(model_groups)} modelo(s):")
+        print(f"  Total Necesario: {total_needed:.2f} kg")
+        print(f"{'='*80}\n")
+
+        # Show breakdown by model
+        for model, products in sorted(model_groups.items()):
+            model_needed = sum(p['qty_needed'] for p in products)
+            print(f"  Modelo: {model}")
+            print(f"    Necesario: {model_needed:.2f} kg")
+            for p in products:
+                best_match = p['close_matches'][0] if p['close_matches'] else None
+                if best_match:
+                    _, match_row, match_sim = best_match
+                    print(f"      - Buscando '{p['coldes']}', mejor coincidencia: '{match_row[2]}' (similitud: {match_sim:.2%})")
+                else:
+                    print(f"      - Buscando '{p['coldes']}', sin coincidencias cercanas")
+            print()
+        print(f"{'='*80}\n")
+
+        # Show explanation of options
+        print("Si responde 'n' (no):")
+        print("  - Omite automáticamente TODAS las coincidencias difusas")
+        print("  - Los productos se marcarán como pedidos fallidos")
+        print("  - ¡No se requiere revisión manual!")
+        print("\nSi responde 's' (sí):")
+        print("  - Muestra revisión detallada uno por uno")
+        print("  - Puede aceptar, omitir, o usar 'todas similares' para cada coincidencia")
+        print()
+
+        # Ask if user wants to review fuzzy matches
+        while True:
+            review_choice = input(">> ¿Revisar coincidencias difusas para estos productos? (s/n): ").strip().lower()
+            if review_choice in ['s', 'si', 'sí', 'y', 'yes', 'n', 'no']:
+                break
+            else:
+                print(f"  ✗ Opción inválida '{review_choice}'. Por favor ingrese s o n.")
+
+        # If user doesn't want to review, skip all and add to failed orders
+        if review_choice in ['n', 'no']:
+            print(f"\n✓ Omitiendo todas las {len(fuzzy_matches_needing_review)} coincidencia(s) difusa(s)...")
+            for match_info in fuzzy_matches_needing_review:
+                failed_orders.append({
+                    'order_num': match_info['order_num'],
+                    'sup': match_info['sup'],
+                    'model': match_info['model'],
+                    'coldes': match_info['coldes'],
+                    'qty_needed': match_info['qty_needed'],
+                    'error': f"Coincidencia difusa rechazada (usuario eligió omitir todas)",
+                    'alternatives': len(match_info['close_matches'])
+                })
+                print(f"  ✗ Omitido: {match_info['model']} - {match_info['coldes']}")
+            print(f"\n✓ Todas las coincidencias difusas omitidas")
+        else:
+            # User wants to review - show the detailed review interface
+            print(f"\n{'='*80}")
+            print(f"REVISANDO COINCIDENCIAS DIFUSAS: {len(fuzzy_matches_needing_review)} producto(s)")
+            print(f"{'='*80}")
+            print("Por favor revise las coincidencias difusas de color y seleccione cuáles usar.\n")
+
+            auto_accept_similar = False  # Flag for 'all similar' option
+
+            for idx, match_info in enumerate(fuzzy_matches_needing_review, 1):
+                order_num = match_info['order_num']
+                sup = match_info['sup']
+                model = match_info['model']
+                coldes = match_info['coldes']
+                qty_needed = match_info['qty_needed']
+                close_matches = match_info['close_matches']
+                looking_for = match_info['looking_for']
+
+                print(f"\n{'─'*76}")
+                print(f"Coincidencia Difusa {idx}/{len(fuzzy_matches_needing_review)}: Pedido #{order_num}")
+                print(f"{'─'*76}")
+                print(f"  Proveedor: {sup}")
+                print(f"  Modelo: {model}")
+                print(f"  Buscando color: '{looking_for}'")
+                print(f"  Cantidad necesaria: {qty_needed:.2f} kg")
+                print(f"  Encontradas {len(close_matches)} coincidencia(s) cercana(s):\n")
+
+                for match_idx, (_, row, sim) in enumerate(close_matches, 1):
+                    print(f"    [{match_idx}] '{row[2]}' (similitud: {sim:.2%}, idcoflete: '{row[5]}')")
+
+                print(f"\n  Mejor coincidencia: '{close_matches[0][1][2]}' (similitud: {close_matches[0][2]:.2%})")
+
+                # If auto_accept_similar is True, automatically accept this match
+                if auto_accept_similar:
+                    response = 's'
+                    print(f"  → Auto-aceptando debido a selección 'todas similares'")
+                else:
+                    # Ask user for confirmation
+                    print(f"\n  Opciones:")
+                    print(f"    s - Sí, usar esta coincidencia")
+                    print(f"    n - No, omitir este producto")
+                    print(f"    t - Todas similares (auto-aceptar esta y todas las coincidencias difusas restantes)")
+
+                    while True:
+                        response = input(f"\n  >> Su elección (s/n/t): ").strip().lower()
+                        if response in ['s', 'si', 'sí', 'y', 'yes', 'n', 'no', 't', 'todas', 'a', 'all']:
+                            break
+                        else:
+                            print(f"  ✗ Opción inválida '{response}'. Por favor ingrese s, n, o t.")
+
+                    if response in ['t', 'todas', 'a', 'all']:
+                        auto_accept_similar = True
+                        response = 's'
+                        print(f"  ✓ 'Todas similares' seleccionado - se auto-aceptarán las coincidencias difusas restantes")
+
+                if response in ['s', 'si', 'sí', 'y', 'yes']:
+                    # Accept the fuzzy match and process the order
+                    best_match_row = close_matches[0][1]
+                    matched_coldes = best_match_row[2]
+                    idcoflete = best_match_row[5]
+
+                    print(f"  ✓ Usando coincidencia difusa: '{matched_coldes}' con idcoflete: '{idcoflete}'")
+
+                    try:
+                        # Get available items with the matched coldes
+                        available_items = get_available_items(engine, sup, model, matched_coldes, idcoflete)
+                        product_found = not available_items.empty
+                        total_available = available_items['pesokgs'].sum() if product_found else 0.0
+
+                        if product_found and total_available > 0:
+                            # Select items to fulfill the order
+                            selected_items = select_items_for_order(available_items, qty_needed)
+
+                            if not selected_items.empty:
+                                # Add order reference columns
+                                selected_items['order_sup'] = sup
+                                selected_items['order_model'] = model
+                                selected_items['order_coldes'] = coldes
+                                selected_items['order_qty_needed'] = qty_needed
+                                selected_items['order_idcoflete'] = selected_items['source_idcoflete']
+
+                                all_selected_items.append(selected_items)
+                                actual_qty = selected_items['pesokgs'].sum()
+                                print(f"  ✓ Agregados {len(selected_items)} ítems, {actual_qty:.2f} kg")
+
+                                if actual_qty < qty_needed:
+                                    print(f"  ⚠ Cumplimiento parcial: {qty_needed - actual_qty:.2f} kg faltante")
+                            else:
+                                print(f"  ✗ No se pudieron seleccionar ítems")
+                                failed_orders.append({
+                                    'order_num': order_num,
+                                    'sup': sup,
+                                    'model': model,
+                                    'coldes': coldes,
+                                    'qty_needed': qty_needed,
+                                    'error': 'No se pudieron seleccionar ítems después de aceptar coincidencia difusa',
+                                    'alternatives': len(close_matches)
+                                })
+                        else:
+                            print(f"  ✗ No se encontraron ítems disponibles para el color coincidente")
+                            failed_orders.append({
+                                'order_num': order_num,
+                                'sup': sup,
+                                'model': model,
+                                'coldes': coldes,
+                                'qty_needed': qty_needed,
+                                'error': 'No hay ítems disponibles después de aceptar coincidencia difusa',
+                                'alternatives': len(close_matches)
+                            })
+                    except Exception as e:
+                        print(f"  ✗ Error procesando coincidencia difusa: {str(e)}")
+                        failed_orders.append({
+                            'order_num': order_num,
+                            'sup': sup,
+                            'model': model,
+                            'coldes': coldes,
+                            'qty_needed': qty_needed,
+                            'error': f'Error después de aceptar coincidencia difusa: {str(e)}',
+                            'alternatives': len(close_matches)
+                        })
+                else:
+                    # User rejected the match
+                    print(f"  ✗ Coincidencia rechazada")
+                    failed_orders.append({
+                        'order_num': order_num,
+                        'sup': sup,
+                        'model': model,
+                        'coldes': coldes,
+                        'qty_needed': qty_needed,
+                        'error': 'Coincidencia difusa rechazada por usuario',
+                        'alternatives': len(close_matches)
+                    })
+
+            print(f"\n{'='*80}")
+            print(f"REVISIÓN DE COINCIDENCIAS DIFUSAS COMPLETA: Procesados {len(fuzzy_matches_needing_review)} producto(s)")
+            print(f"{'='*80}\n")
 
     # Report on failed orders if any
     if failed_orders:
@@ -1539,11 +1845,12 @@ def build_import_order(excel_path: str, output_path: str = None, generate_dbf: b
             # Group by incoterm, idmodelo, idcoldis, and idingreso for easier review
             grouped_df = result_df.groupby(['order_idcoflete', 'idmodelo', 'idcoldis', 'idingreso']).agg({
                 'pesokgs': 'sum',  # Total weight
+                'inicial': 'sum',  # Total CBM
                 'itemno': 'count'  # Count of items
             }).reset_index()
 
             # Rename columnas for clarity
-            grouped_df.columns = ['incoterm', 'idmodelo', 'idcoldis', 'idingreso', 'total_pesokgs', 'item_count']
+            grouped_df.columns = ['incoterm', 'idmodelo', 'idcoldis', 'idingreso', 'total_pesokgs', 'total_cbm', 'item_count']
 
             # Sort by incoterm, idmodelo, idcoldis, and idingreso
             grouped_df = grouped_df.sort_values(
